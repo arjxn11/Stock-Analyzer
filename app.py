@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+import numpy as np
 
 st.title("Stock Analyzer")
 
