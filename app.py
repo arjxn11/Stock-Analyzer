@@ -1,56 +1,70 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import streamlit as st
 from datetime import datetime
+import numpy as np
 
-# ---------------- Streamlit page config ----------------
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
-st.title("📊 Stock Analyzer (VWAP & TWAP)")
+st.title("📊 Stock Analyzer (with VWAP & TWAP)")
 
-# ---------------- User inputs ----------------
-ticker = st.text_input("Ticker (e.g. AAPL, NVDA):").upper().strip()
-start  = st.date_input("Start date", value=pd.to_datetime("2023-01-01"))
-end    = st.date_input("End date",   value=datetime.today())
+# --- User Inputs ---
+ticker = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
+start = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
+end = st.date_input("End Date", value=datetime.today())
 
-# ---------------- Data retrieval ----------------
+# --- Fetch Data ---
 @st.cache_data
-def get_data(tkr, st_dt, en_dt):
-    if tkr == "":
+def get_stock_data(tkr, st_dt, en_dt):
+    if not tkr:
         return pd.DataFrame()
-    df = yf.download(tkr, start=st_dt, end=en_dt, interval="1d")   # <— NO group_by
-    return df.dropna()
-
-# ---------------- Indicator functions ----------------
-def add_vwap(df):
-    vol = df["Volume"].replace(0, np.nan)
-    df["VWAP"] = (df["Close"] * vol).cumsum() / vol.cumsum()
+    df = yf.download(tkr, start=st_dt, end=en_dt, interval="1d")  # <— NO group_by
+    df.dropna(inplace=True)
+    df.reset_index(inplace=True)
     return df
 
-def add_twap(df):
-    df["TWAP"] = df["Close"].expanding().mean()
+# --- VWAP Calculation ---
+def calculate_vwap(df):
+    if 'Close' in df.columns and 'Volume' in df.columns:
+        volume = df['Volume'].replace(0, np.nan)
+        df['VWAP'] = (df['Close'] * volume).cumsum() / volume.cumsum()
+    else:
+        df['VWAP'] = np.nan
     return df
 
-# ---------------- Main button ----------------
+# --- TWAP Calculation ---
+def calculate_twap(df):
+    if 'Close' in df.columns:
+        df['TWAP'] = df['Close'].expanding().mean()
+    else:
+        df['TWAP'] = np.nan
+    return df
+
+# --- Main Logic ---
 if st.button("Analyze"):
-    df = get_data(ticker, start, end)
+    df = get_stock_data(ticker, start, end)
 
     if df.empty:
-        st.error("No data — check ticker or date range.")
+        st.error("❌ No data returned. Check the ticker symbol or date range.")
     else:
-        df = df.reset_index()                       # 'Date' becomes a column
-        df = add_vwap(add_twap(df))                 # add VWAP & TWAP
+        # Clean column names just in case
+        df.columns = df.columns.astype(str).str.strip()
 
-        st.subheader("Raw data (first rows)")
+        # Show raw data
+        st.subheader("✅ Raw Extracted Data")
         st.dataframe(df.head())
 
-        st.subheader("VWAP & TWAP preview (last rows)")
-        st.dataframe(df[["Date", "Close", "Volume", "VWAP", "TWAP"]].tail())
+        # Add VWAP & TWAP
+        df = calculate_vwap(df)
+        df = calculate_twap(df)
 
-        # ---------- Safe plotting ----------
-        plot_cols = ["Close", "VWAP", "TWAP"]
-        if df[plot_cols].notna().any().all():
-            st.subheader("Price chart")
-            st.line_chart(df.set_index("Date")[plot_cols])
-        else:
-            st.warning("One of Close/VWAP/TWAP is all NaN – cannot plot.")
+        # Preview metrics
+        st.subheader("📈 VWAP & TWAP Preview")
+        st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
+
+        # Plot
+        st.subheader("📉 Price Chart")
+        try:
+            df_plot = df.set_index("Date")[['Close', 'VWAP', 'TWAP']]
+            st.line_chart(df_plot)
+        except KeyError:
+            st.warning("Cannot plot — one or more of Close/VWAP/TWAP not found.")
