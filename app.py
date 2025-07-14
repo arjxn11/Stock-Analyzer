@@ -57,7 +57,7 @@ if st.button("Analyze"):
 
         # Raw Data
         st.subheader("Raw Extracted Data")
-        st.dataframe(df.head())
+        st.dataframe(df)
 
         # Adding VWAP and TWAP to the chart
         df = calculate_vwap(df)
