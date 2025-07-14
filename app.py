@@ -12,7 +12,7 @@ end    = st.date_input("End Date",   value=datetime.today())
 
 def get_stock_data(ticker, start, end):
     if ticker == "":
-        return pd.DataFrame()      # empty
+        return pd.DataFrame()
     df = yf.download(ticker, start=start, end=end, interval="1d")
     df.dropna(inplace=True)
     return df
@@ -23,7 +23,6 @@ def calculate_vwap(df):
     else:
         df['VWAP'] = np.nan
     return df
-
 
 def calculate_twap(df):
     df['TWAP'] = df['Close'].expanding().mean()
@@ -39,10 +38,14 @@ if st.button("Analyze"):
         df = calculate_vwap(df)
         df = calculate_twap(df)
 
-        # Make sure required columns exist
-        wanted_cols = {'Close'}
-        if wanted_cols.issubset(df.columns):
-            st.line_chart(df[['Close']])
-            st.write(df[['Close', 'Volume']].tail())
+        # Print columns and non-null counts for debugging
+        st.write("Columns available:", df.columns.tolist())
+        st.write("Non-null counts:\n", df[['Close', 'VWAP', 'TWAP']].notna().sum())
+
+        # Check both column presence and if they're not all NaNs
+        wanted_cols = ['Close', 'VWAP', 'TWAP']
+        if all(col in df.columns and df[col].notna().sum() > 0 for col in wanted_cols):
+            st.line_chart(df[wanted_cols])
+            st.write(df[['Close', 'Volume', 'VWAP', 'TWAP']].tail())
         else:
-            st.warning("Close/VWAP/TWAP columns missing — cannot plot.")
+            st.warning("One or more of Close/VWAP/TWAP is missing or empty. Check volume or date range.")
