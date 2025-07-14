@@ -24,6 +24,11 @@ def calculate_twap(df):
     df['TWAP'] = df['Close'].expanding().mean()
     return df
 
-#update df
-df=calculate_twap(df)
-df=calculate_vwap(df)  
+
+
+if st.button("Analyze"):
+    df= get_stock_data(ticker, start, end)
+    df=calculate_vwap(df)
+    df=calculate_twap(df)
+    st.line_chart(df[['Close', 'VWAP', 'TWAP']])
+    st.write(df[['Close', 'Volume', 'VWAP', 'TWAP']].tail())
