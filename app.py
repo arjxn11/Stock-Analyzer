@@ -17,7 +17,7 @@ end = st.date_input("End Date", value=datetime.today())
 def get_stock_data(ticker, start, end):
     if ticker == "":
         return pd.DataFrame()
-    df = yf.download(ticker, start=start, end=end, interval="1d")
+    df = yf.download(ticker, start=start, end=end, interval="1h")
     df.dropna(inplace=True)
     return df
 
