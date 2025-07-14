@@ -65,14 +65,16 @@ if st.button("Analyze"):
 
         # Optional: Add line chart
         plot_cols = ['Close', 'VWAP', 'TWAP']
-        # Check: All required columns exist
-        cols_exist = all(col in df.columns for col in plot_cols)
 
-        # Check: At least one value in each column is not NaN
-        cols_have_data = all(df[col].notna().any() for col in plot_cols if col in df.columns)
+        # Check that each column exists and contains at least one non-NaN value
+        def is_column_valid(df, col):
+            return col in df.columns and pd.api.types.is_numeric_dtype(df[col]) and df[col].notna().any()
 
-        if cols_exist and cols_have_data:
+        valid_plot_cols = [col for col in plot_cols if is_column_valid(df, col)]
+
+        if valid_plot_cols:
             st.subheader("📉 Price Chart")
-            st.line_chart(df[plot_cols])
+            st.line_chart(df[valid_plot_cols])
         else:
-            st.warning("Cannot plot — missing or empty data in Close/VWAP/TWAP.")
+            st.warning("Cannot plot — one or more of Close/VWAP/TWAP are missing or contain only NaNs.")
+
