@@ -1,59 +1,77 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import streamlit as st
+import numpy as np
 from datetime import datetime
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
-st.title("📊 Stock Analyzer — VWAP & TWAP")
+st.title("📊 Stock Analyzer (with VWAP & TWAP)")
 
-# -------------------- user input --------------------
-ticker = st.text_input("Ticker (e.g. AAPL, NVDA):").upper().strip()
-start  = st.date_input("Start date", value=pd.to_datetime("2023-01-01"))
-end    = st.date_input("End date",   value=datetime.today())
+# --- User Inputs ---
+tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
+st_dt = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
+en_dt = st.date_input("End Date", value=datetime.today())
 
-# -------------------- data loader -------------------
+# --- Fetch Data ---
 @st.cache_data
-def load_data(tkr, s, e):
-    if not tkr:
+def get_stock_data(ticker, start, end):
+    if ticker == "":
         return pd.DataFrame()
-
-    # force multi-level then drop the ticker level
-    df = yf.download(tkr, start=s, end=e, interval="1d",
-                     group_by="ticker", auto_adjust=False)
-
-    # df columns are MultiIndex like ('Close','NVDA') → keep level 0
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.dropna().reset_index()          # 'Date' becomes a column
+    df = yf.download(ticker, start=start, end=end, interval="1d")
+    df.dropna(inplace=True)
     return df
 
-# -------------------- indicators --------------------
-def add_vwap(df):
-    vol = df["Volume"].replace(0, np.nan)
-    df["VWAP"] = (df["Close"] * vol).cumsum() / vol.cumsum()
+# --- VWAP Calculation ---
+def calculate_vwap(df):
+    if 'Close' in df.columns and 'Volume' in df.columns:
+        volume = df['Volume'].replace(0, np.nan)
+        df['VWAP'] = (df['Close'] * volume).cumsum() / volume.cumsum()
+    else:
+        df['VWAP'] = np.nan
     return df
 
-def add_twap(df):
-    df["TWAP"] = df["Close"].expanding().mean()
+# --- TWAP Calculation ---
+def calculate_twap(df):
+    if 'Close' in df.columns:
+        df['TWAP'] = df['Close'].expanding().mean()
+    else:
+        df['TWAP'] = np.nan
     return df
 
-# -------------------- app logic --------------------
+# --- Run Analysis ---
 if st.button("Analyze"):
-    df = load_data(ticker, start, end)
+    df = get_stock_data(tkr, st_dt, en_dt)
 
     if df.empty:
-        st.error("No data returned – check ticker or date range.")
-        st.stop()
+        st.error("❌ No data returned. Check the ticker symbol or date range.")
+    else:
+        df = df.reset_index()
 
-    df = add_twap(add_vwap(df))
+        # --- Handle MultiIndex columns ---
+        if isinstance(df.columns, pd.MultiIndex):
+            try:
+                df.columns = df.columns.get_level_values(0)
+            except Exception:
+                st.warning("⚠️ Could not parse MultiIndex. Please try again.")
+        else:
+            df.columns = df.columns.str.strip()
 
-    st.subheader("Raw data (first rows)")
-    st.dataframe(df.head())
+        # --- Show raw data ---
+        st.subheader("✅ Raw Extracted Data")
+        st.dataframe(df.head())
 
-    st.subheader("VWAP & TWAP preview (last rows)")
-    st.dataframe(df[["Date", "Close", "Volume", "VWAP", "TWAP"]].tail())
+        # --- VWAP & TWAP ---
+        df = calculate_vwap(df)
+        df = calculate_twap(df)
 
-    st.subheader("Price chart")
-    st.line_chart(df.set_index("Date")[["Close", "VWAP", "TWAP"]])
+        # --- Preview ---
+        st.subheader("📈 VWAP & TWAP Preview")
+        st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
+
+        # --- Plot Safely ---
+        plot_cols = ["Close", "VWAP", "TWAP"]
+        if df[plot_cols].notna().any().all():
+            st.subheader("📉 Price Chart")
+            st.line_chart(df.set_index("Date")[plot_cols])
+        else:
+            st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
