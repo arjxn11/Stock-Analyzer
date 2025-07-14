@@ -17,7 +17,14 @@ end = st.date_input("End Date", value=datetime.today())
 def get_stock_data(tkr, st_dt, en_dt):
     if not tkr:
         return pd.DataFrame()
-    df = yf.download(tkr, start=st_dt, end=en_dt, interval="1d")  # No group_by
+    df = yf.download(
+        tkr,
+        start=st_dt,
+        end=en_dt,
+        interval="1d",
+        group_by="column",      # ensures flat column structure
+        auto_adjust=False       # retain original prices and volume
+    )
     df.dropna(inplace=True)
     df.reset_index(inplace=True)
     return df
@@ -39,44 +46,31 @@ def calculate_twap(df):
         df['TWAP'] = np.nan
     return df
 
-# --- Main Logic ---
+# --- Main Execution ---
 if st.button("Analyze"):
     df = get_stock_data(ticker, start, end)
 
     if df.empty:
         st.error("❌ No data returned. Check the ticker symbol or date range.")
     else:
-        # --- Fix for MultiIndex ---
-        if isinstance(df.columns, pd.MultiIndex):
-            # If MultiIndex, try to extract the ticker level
-            try:
-                df = df[ticker]  # select the level for the ticker
-                df.reset_index(inplace=True)
-            except Exception:
-                st.error("⚠️ Could not parse MultiIndex. Please try again.")
-                st.stop()
-
-        # Clean up column names
-        df.columns = [str(col).strip() for col in df.columns]
-
-        # Show raw data
-        st.subheader("✅ Raw Extracted Data")
-        st.dataframe(df.head())
-
-        # VWAP and TWAP
+        df.columns = df.columns.astype(str).str.strip()  # Just in case
         df = calculate_vwap(df)
         df = calculate_twap(df)
 
-        st.subheader("📈 VWAP & TWAP Preview")
-        try:
-            st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
-        except:
-            st.warning("Some columns missing for preview.")
+        # --- Display Raw Data ---
+        st.subheader("✅ Raw Extracted Data")
+        st.dataframe(df.head())
 
-        # Plotting
-        try:
-            df_plot = df.set_index("Date")[["Close", "VWAP", "TWAP"]]
+        # --- Display VWAP & TWAP Preview ---
+        st.subheader("📈 VWAP & TWAP Preview")
+        preview_cols = ['Date', 'Close', 'Volume', 'VWAP', 'TWAP']
+        available_cols = [col for col in preview_cols if col in df.columns]
+        st.dataframe(df[available_cols].tail())
+
+        # --- Plot Safely ---
+        plot_cols = ["Close", "VWAP", "TWAP"]
+        if all(col in df.columns and df[col].notna().any() for col in plot_cols):
             st.subheader("📉 Price Chart")
-            st.line_chart(df_plot)
-        except KeyError:
-            st.warning("Cannot plot — check that 'Date', 'Close', 'VWAP', and 'TWAP' are present.")
+            st.line_chart(df.set_index("Date")[plot_cols])
+        else:
+            st.warning("One of Close/VWAP/TWAP is all NaN – cannot plot.")
