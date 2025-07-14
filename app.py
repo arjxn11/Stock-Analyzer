@@ -40,9 +40,9 @@ if st.button("Analyze"):
         df = calculate_twap(df)
 
         # Make sure required columns exist
-        wanted_cols = {'Close', 'VWAP', 'TWAP'}
+        wanted_cols = {'Close'}
         if wanted_cols.issubset(df.columns):
-            st.line_chart(df[['Close', 'VWAP', 'TWAP']])
-            st.write(df[['Close', 'Volume', 'VWAP', 'TWAP']].tail())
+            st.line_chart(df[['Close']])
+            st.write(df[['Close', 'Volume']].tail())
         else:
             st.warning("Close/VWAP/TWAP columns missing — cannot plot.")
