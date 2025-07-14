@@ -25,14 +25,16 @@ def get_stock_data(ticker, start, end):
 # --- VWAP Calculation ---
 def calculate_vwap(df):
     if 'Close' in df.columns and 'Volume' in df.columns:
-        volume_cumsum = df['Volume'].replace(0, np.nan).cumsum()
-        if volume_cumsum.isnull().all():
-            df['VWAP'] = np.nan
-        else:
-            df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / volume_cumsum
+        volume = df['Volume'].replace(0, np.nan)
+        volume_cumsum = volume.cumsum()
+        price_volume_cumsum = (df['Close'] * df['Volume']).cumsum()
+        
+        # Safe division; avoid 0 volume issues
+        df['VWAP'] = price_volume_cumsum / volume_cumsum
     else:
         df['VWAP'] = np.nan
     return df
+
 
 # --- TWAP Calculation ---
 def calculate_twap(df):
