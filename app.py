@@ -7,12 +7,12 @@ from datetime import datetime
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (with VWAP & TWAP)")
 
-# --- User Inputs ---
+# Request and receive user inputs
 tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
 st_dt = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
 en_dt = st.date_input("End Date", value=datetime.today())
 
-# --- Fetch Data ---
+# Get data
 @st.cache_data
 def get_stock_data(ticker, start, end):
     if ticker == "":
@@ -21,7 +21,7 @@ def get_stock_data(ticker, start, end):
     df.dropna(inplace=True)
     return df
 
-# --- VWAP Calculation ---
+# VWAP and TWAP calculations
 def calculate_vwap(df):
     if 'Close' in df.columns and 'Volume' in df.columns:
         volume = df['Volume'].replace(0, np.nan)
@@ -30,7 +30,6 @@ def calculate_vwap(df):
         df['VWAP'] = np.nan
     return df
 
-# --- TWAP Calculation ---
 def calculate_twap(df):
     if 'Close' in df.columns:
         df['TWAP'] = df['Close'].expanding().mean()
@@ -38,7 +37,7 @@ def calculate_twap(df):
         df['TWAP'] = np.nan
     return df
 
-# --- Run Analysis ---
+# Analysis
 if st.button("Analyze"):
     df = get_stock_data(tkr, st_dt, en_dt)
 
@@ -56,22 +55,24 @@ if st.button("Analyze"):
         else:
             df.columns = df.columns.str.strip()
 
-        # --- Show raw data ---
-        st.subheader("✅ Raw Extracted Data")
+        # Raw Data
+        st.subheader("Raw Extracted Data")
         st.dataframe(df.head())
 
-        # --- VWAP & TWAP ---
+        # Adding VWAP and TWAP to the chart
         df = calculate_vwap(df)
         df = calculate_twap(df)
 
-        # --- Preview ---
-        st.subheader("📈 VWAP & TWAP Preview")
-        st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
+        # Preview
+        st.subheader("📈 VWAP & TWAP")
+        st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']])
 
-        # --- Plot Safely ---
+        # Plot line chart
         plot_cols = ["Close", "VWAP", "TWAP"]
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price Chart")
             st.line_chart(df.set_index("Date")[plot_cols])
+            st.text("If VWAP<TWAP, then we can infer that more volume was traded at lower prices. \n"" VWAP is often used by institutions to evaluate trading efficiency, while TWAP is often used for execution algorithms to slice orders evenly over time")
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
+
