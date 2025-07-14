@@ -17,7 +17,7 @@ end = st.date_input("End Date", value=datetime.today())
 def get_stock_data(tkr, st_dt, en_dt):
     if not tkr:
         return pd.DataFrame()
-    df = yf.download(tkr, start=st_dt, end=en_dt, interval="1d")  # <— NO group_by
+    df = yf.download(tkr, start=st_dt, end=en_dt, interval="1d")  # No group_by
     df.dropna(inplace=True)
     df.reset_index(inplace=True)
     return df
@@ -46,25 +46,37 @@ if st.button("Analyze"):
     if df.empty:
         st.error("❌ No data returned. Check the ticker symbol or date range.")
     else:
-        # Clean column names just in case
-        df.columns = df.columns.astype(str).str.strip()
+        # --- Fix for MultiIndex ---
+        if isinstance(df.columns, pd.MultiIndex):
+            # If MultiIndex, try to extract the ticker level
+            try:
+                df = df[ticker]  # select the level for the ticker
+                df.reset_index(inplace=True)
+            except Exception:
+                st.error("⚠️ Could not parse MultiIndex. Please try again.")
+                st.stop()
+
+        # Clean up column names
+        df.columns = [str(col).strip() for col in df.columns]
 
         # Show raw data
         st.subheader("✅ Raw Extracted Data")
         st.dataframe(df.head())
 
-        # Add VWAP & TWAP
+        # VWAP and TWAP
         df = calculate_vwap(df)
         df = calculate_twap(df)
 
-        # Preview metrics
         st.subheader("📈 VWAP & TWAP Preview")
-        st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
-
-        # Plot
-        st.subheader("📉 Price Chart")
         try:
-            df_plot = df.set_index("Date")[['Close', 'VWAP', 'TWAP']]
+            st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']].tail())
+        except:
+            st.warning("Some columns missing for preview.")
+
+        # Plotting
+        try:
+            df_plot = df.set_index("Date")[["Close", "VWAP", "TWAP"]]
+            st.subheader("📉 Price Chart")
             st.line_chart(df_plot)
         except KeyError:
-            st.warning("Cannot plot — one or more of Close/VWAP/TWAP not found.")
+            st.warning("Cannot plot — check that 'Date', 'Close', 'VWAP', and 'TWAP' are present.")
