@@ -78,7 +78,7 @@ if st.button("Analysis (TWAP and VWAP)"):
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
 
-def analyze_reddit_sentiment(ticker, num_posts=30, num_comments=10):
+def analyze_reddit_sentiment(tkr, num_posts=30, num_comments=10):
     reddit = praw.Reddit(
         client_id="63fWd7C8pSVU3q02ZIKI9g",
         client_secret="	50WPq1yyQL9lH3zGsAdO36eP2Ka6BQ",
@@ -88,7 +88,7 @@ def analyze_reddit_sentiment(ticker, num_posts=30, num_comments=10):
     analyzer = SentimentIntensityAnalyzer()
     results = []
 
-    posts = reddit.subreddit("stocks").search(ticker, sort="new", limit=num_posts)
+    posts = reddit.subreddit("stocks").search(tkr, sort="new", limit=num_posts)
 
     for post in posts:
         post_sentiment = analyzer.polarity_scores(post.title)
