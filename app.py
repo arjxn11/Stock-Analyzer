@@ -45,7 +45,8 @@ if st.button("Analyze"):
         # Check both column presence and if they're not all NaNs
         wanted_cols = ['Close', 'VWAP', 'TWAP']
         if all(col in df.columns and df[col].notna().sum() > 0 for col in wanted_cols):
-            st.line_chart(df[wanted_cols])
+            st.line_chart(df[['Close']])
+
             st.write(df[['Close', 'Volume', 'VWAP', 'TWAP']].tail())
         else:
             st.warning("One or more of Close/VWAP/TWAP is missing or empty. Check volume or date range.")
