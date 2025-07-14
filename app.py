@@ -28,6 +28,15 @@ if st.button("Analyze"):
     if df.empty:
         st.error("❌ No data returned. Check the ticker symbol or date range.")
     else:
-        df = df.reset_index()  # Move 'Date' from index to column
-        st.subheader("✅ Extracted Stock Data (Index Reset)")
-        st.dataframe(df.head(50))  # Show first 50 rows
+        df = df.reset_index()
+        st.subheader("✅ Raw Data:")
+        st.dataframe(df.head())
+
+        # Test VWAP only
+        if 'Close' in df.columns and 'Volume' in df.columns:
+            volume_cumsum = df['Volume'].replace(0, np.nan).cumsum()
+            df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / volume_cumsum
+            st.subheader("📈 VWAP Sample:")
+            st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP']].tail(10))
+        else:
+            st.warning("Volume or Close column missing — cannot compute VWAP.")
