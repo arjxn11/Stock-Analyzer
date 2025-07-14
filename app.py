@@ -112,11 +112,11 @@ def analyze_reddit_sentiment(ticker, num_posts=30, num_comments=10):
     return pd.DataFrame(results)
 
 # Add this in your app body
-if st.button("📢 Run Sentiment Analysis (Reddit)"):
-    if ticker:
-        with st.spinner(f"Analyzing Reddit sentiment for {ticker}..."):
+if st.button("Sentiment Analysis (Reddit)"):
+    if tkr:
+        with st.spinner(f"Analyzing Reddit sentiment for {tkr}..."):
             try:
-                sentiment_df = analyze_reddit_sentiment(ticker)
+                sentiment_df = analyze_reddit_sentiment(tkr)
                 st.subheader("🧠 Reddit Sentiment Results")
                 st.dataframe(sentiment_df)
                 avg_score = sentiment_df["Score"].mean()
