@@ -79,11 +79,12 @@ if st.button("Analysis (TWAP and VWAP)"):
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
 
 
-def analyze_reddit_sentiment(tkr, num_posts=30, num_comments=10):
+@st.cache_data(show_spinner=False)  # cache the expensive API calls
+def analyze_reddit_sentiment(tkr, posts=30, top_comments=10):
     reddit = praw.Reddit(
-        client_id=st.secrets["X09eMbi95NcVzuWk3xXdjg"],
-        client_secret=st.secrets["AUXw94wqBL0sNWUnug6-W-4ti4LpKA"],
-        user_agent="stock-analyzer",
+        client_id     = st.secrets["X09eMbi95NcVzuWk3xXdjg"],
+        client_secret = st.secrets["AUXw94wqBL0sNWUnug6-W-4ti4LpKA"],
+        user_agent    = "stock-analyzer",
         check_for_async=False,
         ratelimit_seconds=60,
     )
@@ -92,25 +93,31 @@ def analyze_reddit_sentiment(tkr, num_posts=30, num_comments=10):
     analyzer = SentimentIntensityAnalyzer()
     rows = []
 
-    posts = reddit.subreddit("wallstreetbets+stocks").search(
-        query=tkr, sort="new", limit=num_posts
-    )
+    # fetch from a union of subs; r/stocks search is often throttled
+    subs = reddit.subreddit("wallstreetbets+stocks")
+    matches = subs.search(tkr, sort="new", limit=posts)
 
-    for post in posts:
-        score = analyzer.polarity_scores(post.title)["compound"]
-        rows.append({"Source": "Title", "Text": post.title, "Score": score})
+    for post in matches:
+        rows.append({
+            "Source":   "Title",
+            "Text":     post.title,
+            "Score":    (s := analyzer.polarity_scores(post.title))["compound"],
+            "Sentiment": "Positive" if s > 0.05 else
+                         "Negative" if s < -0.05 else "Neutral"
+        })
 
-        try:
+        try:                     # comments may blow the 60-req/min allotment
             post.comments.replace_more(limit=0)
         except Exception:
-            continue  # skip if we hit a rate cap
+            continue
 
-        for c in post.comments[:num_comments]:
-            c_score = analyzer.polarity_scores(c.body)["compound"]
-            rows.append({"Source": "Comment", "Text": c.body, "Score": c_score})
+        for c in post.comments[:top_comments]:
+            rows.append({
+                "Source": "Comment",
+                "Text":   c.body,
+                "Score":  (cs := analyzer.polarity_scores(c.body))["compound"],
+                "Sentiment": "Positive" if cs > 0.05 else
+                             "Negative" if cs < -0.05 else "Neutral"
+            })
 
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df["Sentiment"] = np.where(df.Score > 0.05, "Positive",
-                           np.where(df.Score < -0.05, "Negative", "Neutral"))
-    return df
+    return pd.DataFrame(rows)
