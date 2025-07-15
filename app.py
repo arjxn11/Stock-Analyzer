@@ -81,8 +81,8 @@ if st.button("Analysis (TWAP and VWAP)"):
 
 def analyze_reddit_sentiment(tkr, num_posts=30, num_comments=10):
     reddit = praw.Reddit(
-        client_id=st.secrets["63fWd7C8pSVU3q02ZIKI9g"],
-        client_secret=st.secrets["50WPq1yyQL9lH3zGsAdO36eP2Ka6BQ"],
+        client_id=st.secrets["X09eMbi95NcVzuWk3xXdjg"],
+        client_secret=st.secrets["AUXw94wqBL0sNWUnug6-W-4ti4LpKA"],
         user_agent="stock-analyzer",
         check_for_async=False,
         ratelimit_seconds=60,
