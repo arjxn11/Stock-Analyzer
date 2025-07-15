@@ -47,6 +47,32 @@ def calculate_eps(tkr):
     forwardeps = info.get("forwardEps", "N/A")
     return trailingeps, forwardeps
 
+def get_debt_equity(tkr: str):
+    """
+    Returns (equity, debt) for the most recent period in Yahoo Finance.
+    Debt = Long-term Debt  +  Short/Current Portion of Long-term Debt (if available)
+    """
+    ticker = yf.Ticker(tkr)
+    bs: pd.DataFrame = ticker.balance_sheet     # rows = items, cols = periods
+
+    try:
+        equity = bs.loc["Total Stockholder Equity"].iloc[0]
+
+        # Some tickers don’t have “Short Long Term Debt”
+        long_debt   = bs.loc["Long Term Debt"].iloc[0]
+        short_debt  = bs.loc.get("Short Long Term Debt", pd.Series([0])).iloc[0]
+
+        debt = long_debt + short_debt
+        return equity, debt                     # tuple of floats/ints
+
+    except KeyError as e:
+        print(f"❌ Missing field in Yahoo data: {e}")
+    except Exception as e:
+        print(f"❌ Could not retrieve data: {e}")
+
+    # Fallback if anything goes wrong
+    return None, None
+
 
 
 
@@ -94,6 +120,20 @@ if st.button("Stock Analysis"):
         # Preview
         st.subheader("📈 VWAP & TWAP")
         st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']])
+
+        # Debt-To-Equity Ratio 
+        equity, debt= get_debt_equity(tkr)
+        if equity:
+            d_e=debt/equity if equity else None
+            st.write(f'**Equity:** {equity:,.0f}')
+            st.write(f'**Debt:** {debt:,.0f}')
+            st.write(f'**Debt-to-Equity:** {d_e:.2f}')
+        else:
+            st.warning("Debt/Equity data not available for this ticker.")
+        
+        st.markdown("A high D/E ratio indicates that a company is more reliant on debt to finance its operations, which indicates higher financial risk. \n A lower ratio indicates a company relies more on equity financing, suggesting lower financial risk and more stability. ")
+        
+
 
         # Plot line chart
         plot_cols = ["Close", "VWAP", "TWAP"]
