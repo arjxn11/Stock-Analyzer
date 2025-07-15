@@ -100,7 +100,7 @@ if st.button("Stock Analysis"):
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price Chart")
             st.line_chart(df.set_index("Date")[plot_cols])
-            st.markdown("If VWAP<TWAP, then we can infer that more volume was traded at lower prices. \n"" VWAP is often used by institutions to evaluate trading efficiency, while TWAP is often used for execution algorithms to slice orders evenly over time")
+            st.markdown("If VWAP<TWAP, then we can infer that more volume was traded at lower prices. \n VWAP is often used by institutions to evaluate trading efficiency, while TWAP is often used for execution algorithms to slice orders evenly over time")
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
 
