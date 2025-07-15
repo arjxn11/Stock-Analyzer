@@ -127,6 +127,7 @@ if st.button("Stock Analysis"):
 
         # Debt-To-Equity Ratio 
         equity, debt= get_debt_equity(tkr)
+        st.subheader("Debt to Equity Ratio")
         if equity:
             d_e=debt/equity if equity else None
             st.write(f'**Equity:** {equity:,.0f}')
