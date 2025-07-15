@@ -57,12 +57,7 @@ def get_debt_equity(tkr: str):
 
     try:
         equity = bs.loc["Total Stockholder Equity"].iloc[0]
-
-        # Some tickers don’t have “Short Long Term Debt”
-        long_debt   = bs.loc["Long Term Debt"].iloc[0]
-        short_debt  = bs.loc.get("Short Long Term Debt", pd.Series([0])).iloc[0]
-
-        debt = long_debt + short_debt
+        debt = bs.loc['Total Debt'].iloc[0]
         return equity, debt                     # tuple of floats/ints
 
     except KeyError as e:
@@ -132,7 +127,7 @@ if st.button("Stock Analysis"):
             st.warning("Debt/Equity data not available for this ticker.")
         
         st.markdown("A high D/E ratio indicates that a company is more reliant on debt to finance its operations, which indicates higher financial risk. \n A lower ratio indicates a company relies more on equity financing, suggesting lower financial risk and more stability. ")
-        
+
 
 
         # Plot line chart
