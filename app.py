@@ -56,7 +56,7 @@ def get_debt_equity(tkr: str):
     bs: pd.DataFrame = ticker.balance_sheet  # rows = items, cols = periods
 
     try:
-        equity = bs.loc["Total Stockholder Equity"].iloc[0]
+        equity = bs.loc["Common stock equity"].iloc[0]
         debt = bs.loc["Total Debt"].iloc[0]
         return equity, debt  # tuple of floats/ints
 
@@ -66,9 +66,6 @@ def get_debt_equity(tkr: str):
         print(f"❌ Could not retrieve data: {e}")
 
     return None, None
-
-
-
 
 
 # Analysis
