@@ -48,24 +48,36 @@ def calculate_eps(tkr):
     return trailingeps, forwardeps
 
 def get_debt_equity(tkr: str):
-    """
-    Returns (equity, debt) for the most recent period in Yahoo Finance.
-    Debt = Total Debt
-    """
     ticker = yf.Ticker(tkr)
-    bs: pd.DataFrame = ticker.balance_sheet  # rows = items, cols = periods
+    bs = ticker.balance_sheet
 
     try:
-        equity = bs.loc["Common stock equity"].iloc[0]
-        debt = bs.loc["Total Debt"].iloc[0]
-        return equity, debt  # tuple of floats/ints
+        # Try all common equity field variations
+        equity_fields = ["Total Stockholder Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"]
+        debt_fields = ["Total Debt", "Long Term Debt"]
 
-    except KeyError as e:
-        print(f"❌ Missing field in Yahoo data: {e}")
+        equity = None
+        for eq in equity_fields:
+            if eq in bs.index:
+                equity = bs.loc[eq].iloc[0]
+                break
+
+        debt = None
+        for d in debt_fields:
+            if d in bs.index:
+                debt = bs.loc[d].iloc[0]
+                break
+
+        if equity is not None and debt is not None:
+            return equity, debt
+        else:
+            print("❌ Debt or Equity field not found.")
+            return None, None
+
     except Exception as e:
-        print(f"❌ Could not retrieve data: {e}")
+        print(f"❌ Error retrieving data: {e}")
+        return None, None
 
-    return None, None
 
 
 # Analysis
