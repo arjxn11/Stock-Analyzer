@@ -50,23 +50,23 @@ def calculate_eps(tkr):
 def get_debt_equity(tkr: str):
     """
     Returns (equity, debt) for the most recent period in Yahoo Finance.
-    Debt = Long-term Debt  +  Short/Current Portion of Long-term Debt (if available)
+    Debt = Total Debt
     """
     ticker = yf.Ticker(tkr)
-    bs: pd.DataFrame = ticker.balance_sheet     # rows = items, cols = periods
+    bs: pd.DataFrame = ticker.balance_sheet  # rows = items, cols = periods
 
     try:
         equity = bs.loc["Total Stockholder Equity"].iloc[0]
-        debt = bs.loc['Total Debt'].iloc[0]
-        return equity, debt                     # tuple of floats/ints
+        debt = bs.loc["Total Debt"].iloc[0]
+        return equity, debt  # tuple of floats/ints
 
     except KeyError as e:
         print(f"❌ Missing field in Yahoo data: {e}")
     except Exception as e:
         print(f"❌ Could not retrieve data: {e}")
 
-    # Fallback if anything goes wrong
     return None, None
+
 
 
 
