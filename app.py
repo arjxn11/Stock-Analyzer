@@ -78,51 +78,39 @@ if st.button("Analysis (TWAP and VWAP)"):
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
 
+
 def analyze_reddit_sentiment(tkr, num_posts=30, num_comments=10):
     reddit = praw.Reddit(
-        client_id="63fWd7C8pSVU3q02ZIKI9g",
-        client_secret="	50WPq1yyQL9lH3zGsAdO36eP2Ka6BQ",
-        user_agent="stock-analyzer-bot"
+        client_id=st.secrets["63fWd7C8pSVU3q02ZIKI9g"],
+        client_secret=st.secrets["50WPq1yyQL9lH3zGsAdO36eP2Ka6BQ"],
+        user_agent="stock-analyzer",
+        check_for_async=False,
+        ratelimit_seconds=60,
     )
+    reddit.read_only = True
 
     analyzer = SentimentIntensityAnalyzer()
-    results = []
+    rows = []
 
-    posts = reddit.subreddit("stocks").search(tkr, sort="new", limit=num_posts)
+    posts = reddit.subreddit("wallstreetbets+stocks").search(
+        query=tkr, sort="new", limit=num_posts
+    )
 
     for post in posts:
-        post_sentiment = analyzer.polarity_scores(post.title)
-        results.append({
-            "Source": "Title",
-            "Text": post.title,
-            "Score": post_sentiment["compound"],
-            "Sentiment": "Positive" if post_sentiment["compound"] > 0.05 else "Negative" if post_sentiment["compound"] < -0.05 else "Neutral"
-        })
+        score = analyzer.polarity_scores(post.title)["compound"]
+        rows.append({"Source": "Title", "Text": post.title, "Score": score})
 
-        post.comments.replace_more(limit=0)
-        for comment in post.comments[:num_comments]:
-            comment_sentiment = analyzer.polarity_scores(comment.body)
-            results.append({
-                "Source": "Comment",
-                "Text": comment.body,
-                "Score": comment_sentiment["compound"],
-                "Sentiment": "Positive" if comment_sentiment["compound"] > 0.05 else "Negative" if comment_sentiment["compound"] < -0.05 else "Neutral"
-            })
+        try:
+            post.comments.replace_more(limit=0)
+        except Exception:
+            continue  # skip if we hit a rate cap
 
-    return pd.DataFrame(results)
+        for c in post.comments[:num_comments]:
+            c_score = analyzer.polarity_scores(c.body)["compound"]
+            rows.append({"Source": "Comment", "Text": c.body, "Score": c_score})
 
-# Add this in your app body
-if st.button("Sentiment Analysis (Reddit)"):
-    if tkr:
-        with st.spinner(f"Analyzing Reddit sentiment for {tkr}..."):
-            try:
-                sentiment_df = analyze_reddit_sentiment(tkr)
-                st.subheader("🧠 Reddit Sentiment Results")
-                st.dataframe(sentiment_df)
-                avg_score = sentiment_df["Score"].mean()
-                st.metric("📊 Avg Sentiment Score", f"{avg_score:.3f}")
-                st.markdown("Higher positive score = bullish tone; lower score = bearish tone.")
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.warning("Please enter a ticker symbol first.")
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Sentiment"] = np.where(df.Score > 0.05, "Positive",
+                           np.where(df.Score < -0.05, "Negative", "Neutral"))
+    return df
