@@ -39,8 +39,19 @@ def calculate_twap(df):
         df['TWAP'] = np.nan
     return df
 
+def calculate_eps(tkr):
+    ticker = yf.Ticker(tkr)
+    info = ticker.info
+
+    trailingeps = info.get("trailingEps", "N/A")
+    forwardeps = info.get("forwardEps", "N/A")
+    return trailingeps, forwardeps
+
+
+
+
 # Analysis
-if st.button("Analysis (TWAP and VWAP)"):
+if st.button("Stock Analysis"):
     df = get_stock_data(tkr, st_dt, en_dt)
 
     if df.empty:
@@ -65,6 +76,21 @@ if st.button("Analysis (TWAP and VWAP)"):
         df = calculate_vwap(df)
         df = calculate_twap(df)
 
+        #EPS and P/E Ratio
+        trailingeps, forwardeps=calculate_eps(tkr)
+        st.subheader("EPS and P/E ratio")
+        st.write(f'**Trailing EPS:** {trailingeps}')
+        st.write(f'**Forward EPS:** {forwardeps}')
+
+        if trailingeps != "N/A" and isinstance(trailingeps, (float, int)) and trailingeps!=0:
+            current_price=df['Close'].iloc[-1]
+            pe_ratio=current_price/trailingeps
+            st.write(f'**Current Price:** {current_price:.2f}')
+            st.write(f'**Trailing P/E Ratio:** {pe_ratio:.2f}')
+        else:
+            st.warning("P/E Data unavailable")
+
+        st.markdown("If P/E ratio is high, typically over 25, that means investors expect significant growth from the company and the investors are willing to pay more for each dollar of earnings, expecting company profits to rise in the future. \n Tech companies like Amazon and NVIDIA have high P/E ratios because of their rapid growth potential. \n A low P/E ratio, typically 15 or lower, could mean that the stock is undervalued, indicating an opportunity to open a position with that stock (or that it isn't expected grow much)")
         # Preview
         st.subheader("📈 VWAP & TWAP")
         st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']])
@@ -79,45 +105,3 @@ if st.button("Analysis (TWAP and VWAP)"):
             st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
 
 
-@st.cache_data(show_spinner=False)  # cache the expensive API calls
-def analyze_reddit_sentiment(tkr, posts=30, top_comments=10):
-    reddit = praw.Reddit(
-        client_id     = st.secrets["X09eMbi95NcVzuWk3xXdjg"],
-        client_secret = st.secrets["AUXw94wqBL0sNWUnug6-W-4ti4LpKA"],
-        user_agent    = "stock-analyzer",
-        check_for_async=False,
-        ratelimit_seconds=60,
-    )
-    reddit.read_only = True
-
-    analyzer = SentimentIntensityAnalyzer()
-    rows = []
-
-    # fetch from a union of subs; r/stocks search is often throttled
-    subs = reddit.subreddit("wallstreetbets+stocks")
-    matches = subs.search(tkr, sort="new", limit=posts)
-
-    for post in matches:
-        rows.append({
-            "Source":   "Title",
-            "Text":     post.title,
-            "Score":    (s := analyzer.polarity_scores(post.title))["compound"],
-            "Sentiment": "Positive" if s > 0.05 else
-                         "Negative" if s < -0.05 else "Neutral"
-        })
-
-        try:                     # comments may blow the 60-req/min allotment
-            post.comments.replace_more(limit=0)
-        except Exception:
-            continue
-
-        for c in post.comments[:top_comments]:
-            rows.append({
-                "Source": "Comment",
-                "Text":   c.body,
-                "Score":  (cs := analyzer.polarity_scores(c.body))["compound"],
-                "Sentiment": "Positive" if cs > 0.05 else
-                             "Negative" if cs < -0.05 else "Neutral"
-            })
-
-    return pd.DataFrame(rows)
