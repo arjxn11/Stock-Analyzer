@@ -39,6 +39,18 @@ def calculate_twap(df):
         df['TWAP'] = np.nan
     return df
 
+def calculate_rsi(df, period=14):
+    close = df['Close']
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    df['RSI'] = rsi
+    return df
+
+
 def calculate_eps(tkr):
     ticker = yf.Ticker(tkr)
     info = ticker.info
@@ -105,6 +117,7 @@ if st.button("Stock Analysis"):
         # Adding VWAP and TWAP to the chart
         df = calculate_vwap(df)
         df = calculate_twap(df)
+        df= calculate_rsi(df)
 
         #EPS and P/E Ratio
         trailingeps, forwardeps=calculate_eps(tkr)
@@ -141,12 +154,12 @@ if st.button("Stock Analysis"):
 
 
         # Plot line chart
-        plot_cols = ["Close", "VWAP", "TWAP"]
+        plot_cols = ["Close", "VWAP", "TWAP", "RSI"]
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price Chart")
             st.line_chart(df.set_index("Date")[plot_cols])
             st.markdown("If VWAP<TWAP, then we can infer that more volume was traded at lower prices. \n VWAP is often used by institutions to evaluate trading efficiency, while TWAP is often used for execution algorithms to slice orders evenly over time")
         else:
-            st.warning("⚠️ One of Close/VWAP/TWAP is all NaN – cannot plot.")
+            st.warning("⚠️ One of Close/VWAP/TWAP/RSI is all NaN – cannot plot.")
 
 
