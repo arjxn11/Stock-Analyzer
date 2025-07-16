@@ -90,6 +90,13 @@ def get_debt_equity(tkr: str):
         print(f"❌ Error retrieving data: {e}")
         return None, None
 
+def calculate_macd(df, short=12, long=26, signal=9):
+    df['EMA_short'] = df['Close'].ewm(span=short, adjust=False).mean()
+    df['EMA_long'] = df['Close'].ewm(span=long, adjust=False).mean()
+    df['MACD'] = df['EMA_short'] - df['EMA_long']
+    df['Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
+    df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
+    return df
 
 
 # Analysis
@@ -118,6 +125,7 @@ if st.button("Stock Analysis"):
         df = calculate_vwap(df)
         df = calculate_twap(df)
         df= calculate_rsi(df)
+        df= calculate_macd(df)
 
         #EPS and P/E Ratio
         trailingeps, forwardeps=calculate_eps(tkr)
@@ -154,12 +162,36 @@ if st.button("Stock Analysis"):
 
 
         # Plot line chart
-        plot_cols = ["Close", "VWAP", "TWAP", "RSI"]
+        plot_cols = ["Close", "VWAP", "TWAP", "RSI", "MACD", "Signal_Line"]
+
         if df[plot_cols].notna().any().all():
-            st.subheader("📉 Price Chart")
+            st.subheader("📉 Price, RSI & MACD Overview")
             st.line_chart(df.set_index("Date")[plot_cols])
-            st.markdown("If VWAP<TWAP, then we can infer that more volume was traded at lower prices. \n VWAP is often used by institutions to evaluate trading efficiency, while TWAP is often used for execution algorithms to slice orders evenly over time")
+
+            st.markdown("""
+            - **VWAP < TWAP**: Indicates that more volume was traded at lower prices.  
+            VWAP is often used by institutions to evaluate trading efficiency, while TWAP is used in execution algorithms to slice orders evenly over time.
+
+            - **RSI (Relative Strength Index)**:  
+            RSI is a momentum oscillator ranging from 0 to 100. Values **above 70** indicate *overbought* conditions (possible pullback), while **below 30** suggests *oversold* (potential rebound).  
+            RSI is most effective in sideways markets and calculated over a 14-period window.  
+            **Divergence** between RSI and price trends often signals potential **reversals**.
+
+            - **MACD vs Signal Line**:  
+            MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.
+            """)
         else:
-            st.warning("⚠️ One of Close/VWAP/TWAP/RSI is all NaN – cannot plot.")
+            st.warning("⚠️ One of Close/VWAP/TWAP/RSI/MACD/Signal_Line contains only NaNs — cannot plot.")
 
+        # Additional interpretation block (optional)
+        st.markdown("""
+        ### 🔁 Trend Reversals and RSI Divergence
+        A **reversal** refers to a change in the direction of a price trend—either from an uptrend to a downtrend or vice versa.  
+        When RSI diverges from price action, it can signal weakening momentum:
+        - **Bearish divergence**: Price makes new highs but RSI makes lower highs → Potential downtrend reversal.
+        - **Bullish divergence**: Price makes new lows but RSI makes higher lows → Potential uptrend reversal.
 
+        Divergence doesn't guarantee a reversal but can serve as an early warning. Confirm with other indicators like MACD, moving averages, or volume.
+        """)
+
+                
