@@ -101,7 +101,10 @@ def calculate_macd(df, short=12, long=26, signal=9):
     return df
 
 def forecast_prices(df, steps=30):
+    if 'Date' not in df.columns:
+        df = df.reset_index()
     df = df.set_index("Date").asfreq('B')  # Ensure business day frequency
+
     df['Volume'] = df['Volume'].fillna(method='ffill')
     df['Close'] = df['Close'].fillna(method='ffill')
 
