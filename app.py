@@ -5,6 +5,8 @@ import numpy as np
 from datetime import datetime
 import praw
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from pandas.tseries.offsets import BDay
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
@@ -97,6 +99,35 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
     df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
     return df
+
+def forecast_prices(df, steps=30):
+    df = df.set_index("Date").asfreq('B')  # Ensure business day frequency
+    df['Volume'] = df['Volume'].fillna(method='ffill')
+    df['Close'] = df['Close'].fillna(method='ffill')
+
+    # Normalize volume to stabilize variance
+    df['volume_scaled'] = df['Volume'] / 1e6
+
+    # Fit SARIMAX model
+    model = SARIMAX(df['Close'], exog=df[['volume_scaled']], order=(1, 1, 1))
+    model_fit = model.fit(disp=False)
+
+    # Forecast next 'steps' business days
+    future_dates = [df.index[-1] + BDay(i) for i in range(1, steps + 1)]
+    future_volume = df['volume_scaled'].iloc[-1]  # Use last known volume
+
+    forecast = model_fit.get_forecast(steps=steps, exog=np.full((steps, 1), future_volume))
+    pred = forecast.predicted_mean
+    conf_int = forecast.conf_int()
+
+    forecast_df = pd.DataFrame({
+        "Date": future_dates,
+        "Forecast": pred.values,
+        "Lower CI": conf_int.iloc[:, 0].values,
+        "Upper CI": conf_int.iloc[:, 1].values
+    })
+
+    return forecast_df
 
 
 # Analysis
@@ -196,4 +227,18 @@ if st.button("Stock Analysis"):
         Divergence doesn't guarantee a reversal but can serve as an early warning. Confirm with other indicators like MACD, moving averages, or volume.
         """)
 
-               
+# Price Forecast
+# ----------- PART 2: Forecast Button -----------
+if st.button("📈 Forecast Future Prices"):
+    df = get_stock_data(tkr, st_dt, en_dt)  # Initialize or refresh df
+    if not df.empty:
+        df_forecast = forecast_prices(df.copy(), steps=30)
+        st.subheader("📊 30-Day Price Forecast")
+        st.dataframe(df_forecast)
+
+        chart_data = df_forecast.set_index("Date")
+        st.line_chart(chart_data[['Forecast', 'Lower CI', 'Upper CI']])
+        st.markdown("**Note:** Forecast is based on SARIMAX using historical closing prices and volume as exogenous input.")
+    else:
+        st.warning("⚠️ No data available to forecast. Please check ticker and date range.")
+        
