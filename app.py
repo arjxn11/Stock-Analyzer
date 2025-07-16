@@ -162,7 +162,8 @@ if st.button("Stock Analysis"):
 
 
         # Plot line chart
-        plot_cols = ["Close", "VWAP", "TWAP", "RSI", "MACD", "Signal_Line"]
+        plot_cols = ["Close", "VWAP", "TWAP", "RSI"]
+        macd_cols= ["MACD", "Signal_Line"]
 
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price, RSI & MACD Overview")
@@ -175,15 +176,16 @@ if st.button("Stock Analysis"):
             - **RSI (Relative Strength Index)**:  
             RSI is a momentum oscillator ranging from 0 to 100. Values **above 70** indicate *overbought* conditions (possible pullback), while **below 30** suggests *oversold* (potential rebound).  
             RSI is most effective in sideways markets and calculated over a 14-period window.  
-            **Divergence** between RSI and price trends often signals potential **reversals**.
-
-            - **MACD vs Signal Line**:  
-            MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.
-            """)
+            **Divergence** between RSI and price trends often signals potential **reversals**.""")
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP/RSI/MACD/Signal_Line contains only NaNs — cannot plot.")
-
-        # Additional interpretation block (optional)
+        if df[macd_cols].notna().any().all():
+            st.subheader("📉 MACD & Signal Line")
+            st.line_chart(df.set_index("Date")[macd_cols])
+        else: 
+            st.warning("⚠️ One of MACD/Signal_Line contains only NaNs — cannot plot.")
+        st.markdown("MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.")
+        # Explaination
         st.markdown("""
         ### 🔁 Trend Reversals and RSI Divergence
         A **reversal** refers to a change in the direction of a price trend—either from an uptrend to a downtrend or vice versa.  
@@ -194,4 +196,4 @@ if st.button("Stock Analysis"):
         Divergence doesn't guarantee a reversal but can serve as an early warning. Confirm with other indicators like MACD, moving averages, or volume.
         """)
 
-                
+               
