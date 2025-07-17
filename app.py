@@ -252,7 +252,7 @@ if st.button("Stock Analysis"):
 # Price Forecast
 # ----------- PART 2: Forecast Button -----------
 if st.button("📈 Forecast Future Prices"):
-    df = get_stock_data(tkr, st_dt, en_dt)  # Initialize or refresh df
+    df = get_stock_data(tkr, st_dt, en_dt, int_time)  # Initialize or refresh df
     if not df.empty:
         df_forecast = forecast_prices(df.copy(), steps=30)
         st.subheader("📊 30-Day Price Forecast")
