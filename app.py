@@ -183,12 +183,13 @@ def forecast_prices(df, steps=30):
         "Upper CI": best_forecast.values * 1.02
     }, index=best_forecast.index)
 
-    # Convert index to 'Date' column
-    forecast_df.index.name = "Date"
+    # Fix: properly reset and rename index column to "Date"
     forecast_df = forecast_df.reset_index()
+    forecast_df.columns.values[0] = "Date"  # ensures first column is "Date"
 
-    # Optional but safe: ensure 'Date' is datetime
+    # Optionally ensure Date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"])
+
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
     st.write("🧾 Forecast Data Preview")
