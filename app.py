@@ -309,13 +309,13 @@ if st.button("📈 Forecast Future Prices"):
         try:
             df_forecast = forecast_prices(df.copy(), steps=30)
 
-            # 🔄 Reset and ensure 'Date' is present
-            df_forecast = df_forecast.reset_index()
-            if df_forecast.columns[0] != "Date":
-                df_forecast.rename(columns={df_forecast.columns[0]: "Date"}, inplace=True)
+            # ✅ Ensure 'Date' is a column and correctly named
+            if 'Date' not in df_forecast.columns:
+                df_forecast = df_forecast.reset_index().rename(columns={'index': 'Date'})
 
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
+
