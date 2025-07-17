@@ -298,11 +298,14 @@ if st.button("📈 Forecast Future Prices"):
         try:
             df_forecast = forecast_prices(df.copy(), steps=30)
 
-            # ✅ Always reset index to make 'Date' a real column
+            # ✅ Always reset index and rename column explicitly
             df_forecast = df_forecast.reset_index()
+            df_forecast.rename(columns={df_forecast.columns[0]: "Date"}, inplace=True)
 
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
+            st.write(df_forecast.columns.tolist())
+
 
             # ✅ Plot forecast with confidence interval
             fig, ax = plt.subplots(figsize=(12, 5))
