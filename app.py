@@ -286,8 +286,7 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
-
-# Forecast button
+-
 if st.button("📈 Forecast Future Prices"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
@@ -298,35 +297,29 @@ if st.button("📈 Forecast Future Prices"):
     else:
         try:
             df_forecast = forecast_prices(df.copy(), steps=30)
+
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
 
-            # Ensure 'Date' is a column (reset if necessary)
-            if 'Date' not in df_forecast.columns:
-                df_forecast = df_forecast.reset_index()
+            # ✅ Ensure 'Date' is a column
+            df_forecast = df_forecast.reset_index(drop=False)
 
-            # Plot forecast with confidence interval
+            # 📈 Plot forecast with confidence interval
             fig, ax = plt.subplots(figsize=(12, 5))
 
-            # Plot forecast line
             ax.plot(df_forecast["Date"], df_forecast["Forecast"], label="Forecast", color="blue")
-
-            # Plot confidence interval as shaded region
             ax.fill_between(df_forecast["Date"],
                             df_forecast["Lower CI"],
                             df_forecast["Upper CI"],
                             color='gray', alpha=0.3, label="Confidence Interval")
 
-            # Labels and legend
             ax.set_title("30-Day Price Forecast with Confidence Interval")
             ax.set_xlabel("Date")
             ax.set_ylabel("Price")
             ax.legend()
             ax.grid(True)
 
-            # Display in Streamlit
             st.pyplot(fig)
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
-        
