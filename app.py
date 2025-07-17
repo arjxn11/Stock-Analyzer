@@ -286,6 +286,7 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
+
 if st.button("📈 Forecast Future Prices"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
@@ -297,15 +298,14 @@ if st.button("📈 Forecast Future Prices"):
         try:
             df_forecast = forecast_prices(df.copy(), steps=30)
 
+            # ✅ Always reset index to make 'Date' a real column
+            df_forecast = df_forecast.reset_index()
+
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
 
-            # ✅ Ensure 'Date' is a column
-            df_forecast = df_forecast.reset_index()
-
-            # 📈 Plot forecast with confidence interval
+            # ✅ Plot forecast with confidence interval
             fig, ax = plt.subplots(figsize=(12, 5))
-
             ax.plot(df_forecast["Date"], df_forecast["Forecast"], label="Forecast", color="blue")
             ax.fill_between(df_forecast["Date"],
                             df_forecast["Lower CI"],
