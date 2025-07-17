@@ -6,3 +6,6 @@ numpy
 praw
 vadersentiment
 statsmodels
+scikit-learn
+prophet
+matplotlib
