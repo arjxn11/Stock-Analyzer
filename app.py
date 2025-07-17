@@ -175,12 +175,18 @@ def forecast_prices(df, steps=30):
     best_forecast = forecasts[best_model]
 
     # Create forecast output DataFrame
-    forecast_df = pd.DataFrame({"Forecast": best_forecast.values,
-        "Lower CI": best_forecast.values * 0.98,  # confidence interval
+    forecast_df = pd.DataFrame({
+        "Forecast": best_forecast.values,
+        "Lower CI": best_forecast.values * 0.98,
         "Upper CI": best_forecast.values * 1.02
     }, index=best_forecast.index)
-    forecast_df.index.name = "Date"
 
+    # ✅ Explicitly convert index to column
+    forecast_df = forecast_df.reset_index()
+    forecast_df.rename(columns={"index": "Date"}, inplace=True)
+
+    # ✅ Optional: convert to datetime if not already
+    forecast_df["Date"] = pd.to_datetime(forecast_df["Date"])
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
 
