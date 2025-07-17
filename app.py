@@ -286,7 +286,6 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
--
 if st.button("📈 Forecast Future Prices"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
