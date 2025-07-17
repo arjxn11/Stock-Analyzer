@@ -144,9 +144,10 @@ def forecast_prophet(series, steps=30):
     return forecast[['ds', 'yhat']].set_index('ds')['yhat'][-steps:]
 
 def forecast_prices(df, steps=30):
-    series = df.set_index("Date")["Close"].asfreq('D').ffill()  # ensure daily frequency
+    # Ensure 'Date' is the index and convert to daily frequency
+    series = df.set_index("Date")["Close"].asfreq('D').ffill()
 
-    # Split into train/test for RMSE calculation
+    # Split into training and testing sets
     train = series[:-steps]
     test = series[-steps:]
 
@@ -159,6 +160,7 @@ def forecast_prices(df, steps=30):
     rmse_results = {}
     forecasts = {}
 
+    # Evaluate each model
     for name, model_func in models.items():
         try:
             pred = model_func(train, steps=steps)
@@ -170,27 +172,30 @@ def forecast_prices(df, steps=30):
             rmse_results[name] = np.inf
             print(f"Model {name} failed: {e}")
 
-    # Select best model
+    # Choose the best model based on RMSE
     best_model = min(rmse_results, key=rmse_results.get)
     best_forecast = forecasts[best_model]
 
-    # Create forecast output DataFrame
+    # Create forecast output DataFrame with confidence intervals
     forecast_df = pd.DataFrame({
         "Forecast": best_forecast.values,
         "Lower CI": best_forecast.values * 0.98,
         "Upper CI": best_forecast.values * 1.02
     }, index=best_forecast.index)
 
-    # ✅ Explicitly convert index to column
+    # Convert index to 'Date' column
+    forecast_df.index.name = "Date"
     forecast_df = forecast_df.reset_index()
-    forecast_df.rename(columns={"index": "Date"}, inplace=True)
 
-    # ✅ Optional: convert to datetime if not already
+    # Optional but safe: ensure 'Date' is datetime
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"])
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
+    st.write("🧾 Forecast Data Preview")
+    st.dataframe(forecast_df)
 
     return forecast_df
+
 
 
 # Analysis
