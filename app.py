@@ -177,15 +177,16 @@ def forecast_prices(df, steps=30):
     best_forecast = forecasts[best_model]
 
     # Create forecast output DataFrame with confidence intervals
+# Create forecast output DataFrame with confidence intervals
     forecast_df = pd.DataFrame({
         "Forecast": best_forecast.values,
         "Lower CI": best_forecast.values * 0.98,
         "Upper CI": best_forecast.values * 1.02
     }, index=best_forecast.index)
 
-    # Fix: properly reset and rename index column to "Date"
-    forecast_df = forecast_df.reset_index()
-    forecast_df.columns.values[0] = "Date"  # ensures first column is "Date"
+    forecast_df.index.name = "Date"  # <- This line is crucial
+    forecast_df = forecast_df.reset_index()  # Now 'Date' is a proper column
+
 
     # Optionally ensure Date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"])
