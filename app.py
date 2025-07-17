@@ -29,9 +29,16 @@ int_time = st.selectbox(
 def get_stock_data(ticker, start, end, interval):
     if ticker == "":
         return pd.DataFrame()
+    
     df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
     df.dropna(inplace=True)
+
+    # Normalize datetime index
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    df = df.rename_axis("Date").reset_index()
+
     return df
+
 
 # VWAP and TWAP calculations
 def calculate_vwap(df):
