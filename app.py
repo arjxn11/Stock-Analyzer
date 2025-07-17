@@ -36,6 +36,9 @@ def get_stock_data(ticker, start, end, interval):
     # Normalize datetime index
     df.index = pd.to_datetime(df.index).tz_localize(None)
     df = df.rename_axis("Date").reset_index()
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.sort_values('Date', inplace=True)
+    df.set_index('Date', inplace=True)
 
     return df
 
@@ -211,12 +214,13 @@ if st.button("Stock Analysis"):
 
 
         # Plot line chart
-        plot_cols = ["Close", "VWAP", "TWAP", "RSI"]
+        plot_cols = ["Close", "VWAP", "TWAP"]
         macd_cols= ["MACD", "Signal_Line"]
 
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price, RSI & MACD Overview")
             st.line_chart(df.set_index("Date")[plot_cols])
+            st.line_chart(df.set_index('Date')["RSI"])
 
             st.markdown("""
             - **VWAP < TWAP**: Indicates that more volume was traded at lower prices.  
