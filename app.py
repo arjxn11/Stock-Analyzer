@@ -27,9 +27,9 @@ int_time = st.selectbox(
         "1m", "2m", "5m", "15m", "30m", "60m", "90m",
         "1d", "5d", "1wk", "1mo", "3mo"
     ],
-    index=6  # Defaults to "60m"
+    index=7  # Defaults to 1d
 )
-
+st.markdown("Note: Some tickers may not provide data for all intervals. Try 30m, 60m, 1d, 1w as a check in case you're unable to see data by-minute.")
 # Get data
 @st.cache_data
 def get_stock_data(ticker, start, end, interval):
@@ -179,7 +179,8 @@ def forecast_prices(df, steps=30):
         "Lower CI": best_forecast.values * 0.98,  # confidence interval
         "Upper CI": best_forecast.values * 1.02
     }, index=best_forecast.index)
-    forecast_df.index_name="Date"
+    forecast_df.index.name = "Date"
+
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
 
