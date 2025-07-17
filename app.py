@@ -301,26 +301,30 @@ if st.button("📈 Forecast Future Prices"):
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
 
-            # Ensure 'Date' is a column
-            df_forecast = df_forecast.reset_index() if df_forecast.index.name == "Date" else df_forecast
-
-            chart_data = df_forecast.set_index("Date")
+            # Ensure 'Date' is a column (reset if necessary)
+            if 'Date' not in df_forecast.columns:
+                df_forecast = df_forecast.reset_index()
 
             # Plot forecast with confidence interval
             fig, ax = plt.subplots(figsize=(12, 5))
 
+            # Plot forecast line
             ax.plot(df_forecast["Date"], df_forecast["Forecast"], label="Forecast", color="blue")
+
+            # Plot confidence interval as shaded region
             ax.fill_between(df_forecast["Date"],
                             df_forecast["Lower CI"],
                             df_forecast["Upper CI"],
                             color='gray', alpha=0.3, label="Confidence Interval")
 
+            # Labels and legend
             ax.set_title("30-Day Price Forecast with Confidence Interval")
             ax.set_xlabel("Date")
             ax.set_ylabel("Price")
             ax.legend()
             ax.grid(True)
 
+            # Display in Streamlit
             st.pyplot(fig)
 
         except Exception as e:
