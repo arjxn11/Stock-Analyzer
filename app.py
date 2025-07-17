@@ -175,12 +175,11 @@ def forecast_prices(df, steps=30):
     best_forecast = forecasts[best_model]
 
     # Create forecast output DataFrame
-    forecast_df = pd.DataFrame({
-        "Date": best_forecast.index,
-        "Forecast": best_forecast.values,
-        "Lower CI": best_forecast.values * 0.98,  # mock confidence interval
+    forecast_df = pd.DataFrame({"Forecast": best_forecast.values,
+        "Lower CI": best_forecast.values * 0.98,  # confidence interval
         "Upper CI": best_forecast.values * 1.02
-    })
+    }, index=best_forecast.index)
+    forecast_df.index_name="Date"
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
 
@@ -301,7 +300,7 @@ if st.button("📈 Forecast Future Prices"):
             st.dataframe(df_forecast)
 
             # ✅ Ensure 'Date' is a column
-            df_forecast = df_forecast.reset_index(drop=False)
+            df_forecast = df_forecast.reset_index()
 
             # 📈 Plot forecast with confidence interval
             fig, ax = plt.subplots(figsize=(12, 5))
