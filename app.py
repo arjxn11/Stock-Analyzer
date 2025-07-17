@@ -16,7 +16,7 @@ tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
 st_dt = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
 en_dt = st.date_input("End Date", value=datetime.today())
 int_time = st.selectbox(
-    "Select data interval:",
+    "Select time interval:",
     options=[
         "1m", "2m", "5m", "15m", "30m", "60m", "90m",
         "1d", "5d", "1wk", "1mo", "3mo"
