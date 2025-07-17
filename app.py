@@ -143,7 +143,7 @@ def forecast_prices(df, steps=30):
 
 # Analysis
 if st.button("Stock Analysis"):
-    df = get_stock_data(tkr, st_dt, en_dt)
+    df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
     if df.empty:
         st.error("❌ No data returned. Check the ticker symbol or date range.")
