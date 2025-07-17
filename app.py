@@ -298,30 +298,13 @@ if st.button("📈 Forecast Future Prices"):
         try:
             df_forecast = forecast_prices(df.copy(), steps=30)
 
-            # ✅ Always reset index and rename column explicitly
+            # 🔄 Reset and ensure 'Date' is present
             df_forecast = df_forecast.reset_index()
-            df_forecast.rename(columns={df_forecast.columns[0]: "Date"}, inplace=True)
+            if df_forecast.columns[0] != "Date":
+                df_forecast.rename(columns={df_forecast.columns[0]: "Date"}, inplace=True)
 
             st.subheader("📊 30-Day Price Forecast")
             st.dataframe(df_forecast)
-            st.write(df_forecast.columns.tolist())
-
-
-            # ✅ Plot forecast with confidence interval
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(df_forecast["Date"], df_forecast["Forecast"], label="Forecast", color="blue")
-            ax.fill_between(df_forecast["Date"],
-                            df_forecast["Lower CI"],
-                            df_forecast["Upper CI"],
-                            color='gray', alpha=0.3, label="Confidence Interval")
-
-            ax.set_title("30-Day Price Forecast with Confidence Interval")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price")
-            ax.legend()
-            ax.grid(True)
-
-            st.pyplot(fig)
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
