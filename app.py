@@ -15,19 +15,21 @@ st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
 tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
 st_dt = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
 en_dt = st.date_input("End Date", value=datetime.today())
-int_time = st.selectbox("Select data interval:",
+int_time = st.selectbox(
+    "Select data interval:",
     options=[
         "1m", "2m", "5m", "15m", "30m", "60m", "90m",
         "1d", "5d", "1wk", "1mo", "3mo"
     ],
-    index=6  # Defaults the interval to "60m"
+    index=6  # Defaults to "60m"
 )
+
 # Get data
 @st.cache_data
-def get_stock_data(ticker, start, end):
+def get_stock_data(ticker, start, end, interval):
     if ticker == "":
         return pd.DataFrame()
-    df = yf.download(ticker, start=start, end=end, interval=int_time)
+    df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
     df.dropna(inplace=True)
     return df
 
