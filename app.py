@@ -278,7 +278,13 @@ if st.button("📈 Forecast Future Prices"):
         st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
     else:
         try:
-            df.set_index("Date", inplace=True)
+            # ✅ Ensure 'Date' is a column and set as index
+            if 'Date' not in df.columns:
+                df = df.reset_index()
+            df['Date'] = pd.to_datetime(df['Date'])
+            df.set_index('Date', inplace=True)
+
+            # ✅ Now pass to forecast_xgboost
             forecast_df = forecast_xgboost(df, steps=30)
 
             st.subheader("📊 30-Day Price Forecast (XGBoost)")
