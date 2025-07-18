@@ -7,11 +7,10 @@ import praw
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from pandas.tseries.offsets import BDay
 import matplotlib.pyplot as plt
-from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from statsmodels.tsa.arima.model import ARIMA
-from xgboost import XGBRegressor
+from transformers import BertTokenizer, BertForSequenceClassification, pipeline
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
@@ -123,54 +122,45 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
     return df
 
+@st.cache_resource
+def load_finbert():
+    tokenizer = BertTokenizer.from_pretrained("ProsusAI/finbert")
+    model = BertForSequenceClassification.from_pretrained("ProsusAI/finbert")
+    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 
-def xgboost_forecast(df, forecast_days=7):
-    df = df.copy()
+finbert = load_finbert()
 
-    # Ensure Date is a column
-    if df.index.name == "Date":
-        df = df.reset_index()
+@st.cache_data(show_spinner=False)
+def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
+    reddit = praw.Reddit(
+        client_id=st.secrets["REDDIT_CLIENT_ID"],
+        client_secret=st.secrets["REDDIT_CLIENT_SECRET"],
+        user_agent="stock-analyzer",
+        check_for_async=False
+    )
+    reddit.read_only = True
 
-    # Safety check
-    if not {"Date", "Close"}.issubset(df.columns):
-        raise ValueError("Input DataFrame must contain 'Date' and 'Close' columns.")
+    rows = []
+    subs = reddit.subreddit("wallstreetbets+stocks+investing")
+    query = tkr
 
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df[["Date", "Close"]].dropna()
-    df.sort_values("Date", inplace=True)
-    df.reset_index(drop=True, inplace=True)
+    end_time = datetime.utcnow()
+    start_time = end_time - pd.Timedelta(days=days_back)
 
-    # Limit to recent history
-    df = df[-60:].copy()
-    df["day_num"] = np.arange(len(df))
+    for post in subs.search(query, sort="new", limit=posts):
+        created_time = datetime.utcfromtimestamp(post.created_utc)
+        if created_time < start_time:
+            continue
 
-    # Prepare data
-    X = df[["day_num"]]
-    y = df["Close"]
+        sentiment = finbert(post.title)[0]
+        rows.append({
+            "Date": created_time,
+            "Text": post.title,
+            "Label": sentiment["label"],  # 'positive', 'neutral', 'negative'
+            "Score": sentiment["score"]
+        })
 
-    # Train-test split
-    X_train = X[:-forecast_days]
-    y_train = y[:-forecast_days]
-
-    # Train XGBoost model
-    model = XGBRegressor(n_estimators=100)
-    model.fit(X_train, y_train)
-
-    # Forecast future
-    future_days = np.arange(len(df), len(df) + forecast_days).reshape(-1, 1)
-    y_pred = model.predict(future_days)
-
-    # Create date range for forecast
-    last_date = df["Date"].iloc[-1]
-    future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, forecast_days + 1)]
-
-    forecast_df = pd.DataFrame({
-        "Date": future_dates,
-        "Forecast": y_pred
-    })
-
-    return df[-30:], forecast_df
-
+    return pd.DataFrame(rows)
 
 
 # Analysis
@@ -273,28 +263,23 @@ if st.button("Stock Analysis"):
 
 # Price Forecast
 
-if st.button("📈 Forecast Price"):
-    df = get_stock_data(tkr, st_dt, en_dt, int_time).reset_index()
-
-    if df.empty:
-        st.warning("⚠️ No data available to forecast.")
-    elif not {"Date", "Close"}.issubset(df.columns):
-        st.error("❌ Data must contain 'Date' and 'Close' columns.")
-    else:
-        try:
-            hist_df, forecast_df = xgboost_forecast(df)
-
-            # Combine historical and forecast
-            combined = pd.concat([
-                hist_df[["Date", "Close"]].rename(columns={"Close": "Price"}),
-                forecast_df.rename(columns={"Forecast": "Price"})
-            ])
-
-            # Plot
-            st.line_chart(combined.set_index("Date"))
-
-        except Exception as e:
-            st.error(f"❌ Forecasting failed: {e}")
-
 
 # Sentiment Analysis
+
+if st.button("📢 Analyze Reddit Sentiment"):
+    if tkr:
+        sentiment_df = analyze_reddit_sentiment(tkr)
+        if not sentiment_df.empty:
+            sentiment_counts = sentiment_df['Label'].value_counts()
+            avg_conf = sentiment_df['Score'].mean()
+            st.subheader(f"🧠 FinBERT Sentiment Summary for r/{tkr}")
+            st.metric(label="Average Confidence Score", value=f"{avg_conf:.3f}")
+            st.write(sentiment_counts.rename("Count").to_frame())
+
+            st.dataframe(sentiment_df.sort_values("Score", ascending=False))
+
+            st.markdown("**FinBERT labels:** `positive`, `neutral`, `negative` — trained on financial texts like earnings calls.")
+        else:
+            st.warning("No recent Reddit posts found related to this ticker.")
+    else:
+        st.warning("Enter a stock ticker to analyze Reddit sentiment.")
