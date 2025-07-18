@@ -294,3 +294,5 @@ if st.button("📈 Forecast Future Prices (LSTM)"):
             st.dataframe(df_lstm)
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
+
+# Sentiment Analysis
