@@ -6,9 +6,6 @@ from datetime import datetime
 import praw
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from pandas.tseries.offsets import BDay
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
-from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 
 
@@ -122,60 +119,6 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
     return df
 
-def lstm_forecast(df, steps=30):
-    from sklearn.preprocessing import MinMaxScaler
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras.layers import LSTM, Dense, Dropout
-    from datetime import timedelta
-
-    df = df[["Close", "Volume"]].dropna()
-    scaler = MinMaxScaler()
-    scaled = scaler.fit_transform(df)
-
-    sequence_length = 60
-    X, y = [], []
-
-    for i in range(sequence_length, len(scaled)):
-        X.append(scaled[i - sequence_length:i])
-        y.append(scaled[i, 0])  # close price
-
-    X, y = np.array(X), np.array(y)
-    split = int(0.8 * len(X))
-    X_train, y_train = X[:split], y[:split]
-
-    model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
-        Dropout(0.2),
-        LSTM(50),
-        Dropout(0.2),
-        Dense(1)
-    ])
-
-    model.compile(optimizer="adam", loss="mean_squared_error")
-    model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
-
-    # Forecasting
-    last_seq = scaled[-sequence_length:]
-    forecast = []
-    avg_vol = np.mean(scaled[:, 1])
-
-    for _ in range(steps):
-        input_seq = last_seq.reshape(1, sequence_length, 2)
-        next_close = model.predict(input_seq, verbose=0)[0][0]
-        next_scaled = np.array([[next_close, avg_vol]])
-        forecast.append(next_scaled[0])
-        last_seq = np.vstack((last_seq[1:], next_scaled))
-
-    forecast_array = np.array(forecast)
-    forecast_full = np.column_stack([forecast_array[:, 0], np.full((steps,), avg_vol)])
-    reconstructed = scaler.inverse_transform(forecast_full)[:, 0]
-
-    last_date = df.index[-1] if isinstance(df.index, pd.DatetimeIndex) else pd.to_datetime(df['Date'].iloc[-1])
-    future_dates = [last_date + timedelta(days=i+1) for i in range(steps)]
-
-    forecast_df = pd.DataFrame({"Date": future_dates, "Forecasted Close": reconstructed})
-    return forecast_df
-
 
 
 
@@ -279,20 +222,5 @@ if st.button("Stock Analysis"):
 
 # Price Forecast
 
-if st.button("📈 Forecast Future Prices (LSTM)"):
-    df = get_stock_data(tkr, st_dt, en_dt, int_time)
-
-    if df.empty:
-        st.warning("⚠️ No data available to forecast. Please check ticker and date range.")
-    elif int_time not in ["1d", "1wk"]:
-        st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
-    else:
-        try:
-            df_lstm = lstm_forecast(df.copy(), steps=30)
-            st.subheader("📊 30-Day LSTM Forecast")
-            st.line_chart(df_lstm.set_index("Date")["Forecasted Close"])
-            st.dataframe(df_lstm)
-        except Exception as e:
-            st.error(f"❌ Forecasting failed: {e}")
 
 # Sentiment Analysis
