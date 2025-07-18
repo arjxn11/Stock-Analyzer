@@ -11,6 +11,8 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from statsmodels.tsa.arima.model import ARIMA
 from transformers import BertTokenizer, BertForSequenceClassification, pipeline
+import torch
+import torch.nn.functional as F
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
@@ -126,12 +128,14 @@ def calculate_macd(df, short=12, long=26, signal=9):
 def load_finbert():
     tokenizer = BertTokenizer.from_pretrained("ProsusAI/finbert")
     model = BertForSequenceClassification.from_pretrained("ProsusAI/finbert")
-    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+    model.eval()
+    return tokenizer, model
 
-finbert = load_finbert()
 
 @st.cache_data(show_spinner=False)
 def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
+    tokenizer, model = load_finbert()
+
     reddit = praw.Reddit(
         client_id=st.secrets["REDDIT_CLIENT_ID"],
         client_secret=st.secrets["REDDIT_CLIENT_SECRET"],
@@ -152,12 +156,23 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
         if created_time < start_time:
             continue
 
-        sentiment = finbert(post.title)[0]
+        # Tokenize and run through model
+        inputs = tokenizer(post.title, return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            logits = model(**inputs).logits
+            probs = F.softmax(logits, dim=1).squeeze().tolist()
+
+        labels = model.config.id2label  # Maps [0, 1, 2] to ['positive', 'negative', 'neutral']
+        sentiment_scores = {labels[i]: round(p, 4) for i, p in enumerate(probs)}
+        top_label = max(sentiment_scores, key=sentiment_scores.get)
+
         rows.append({
             "Date": created_time,
             "Text": post.title,
-            "Label": sentiment["label"],  # 'positive', 'neutral', 'negative'
-            "Score": sentiment["score"]
+            "Label": top_label,
+            "Positive": sentiment_scores["positive"],
+            "Negative": sentiment_scores["negative"],
+            "Neutral": sentiment_scores["neutral"]
         })
 
     return pd.DataFrame(rows)
@@ -269,18 +284,33 @@ if st.button("Stock Analysis"):
 if st.button("📢 Analyze Reddit Sentiment"):
     if tkr:
         sentiment_df = analyze_reddit_sentiment(tkr)
+
         if not sentiment_df.empty:
             sentiment_counts = sentiment_df['Label'].value_counts()
-            avg_conf = sentiment_df['Score'].mean()
+            avg_positive = sentiment_df['Positive'].mean()
+            avg_negative = sentiment_df['Negative'].mean()
+            avg_neutral = sentiment_df['Neutral'].mean()
+
             st.subheader(f"🧠 FinBERT Sentiment Summary for r/{tkr}")
-            st.metric(label="Average Confidence Score", value=f"{avg_conf:.3f}")
+            st.metric(label="Avg Positive Score", value=f"{avg_positive:.3f}")
+            st.metric(label="Avg Negative Score", value=f"{avg_negative:.3f}")
+            st.metric(label="Avg Neutral Score", value=f"{avg_neutral:.3f}")
+
             st.write(sentiment_counts.rename("Count").to_frame())
 
-            st.dataframe(sentiment_df.sort_values("Score", ascending=False))
+            # Show sorted sentiment scores
+            st.dataframe(
+                sentiment_df.sort_values("Positive", ascending=False)[
+                    ["Date", "Text", "Label", "Positive", "Negative", "Neutral"]
+                ]
+            )
 
-            st.markdown("**FinBERT labels:** `positive`, `neutral`, `negative` — trained on financial texts like earnings calls.")
+            st.markdown("""
+            - **Label**: Most confident sentiment classification (based on highest probability)
+            - **Positive/Negative/Neutral**: Full probability scores for each sentiment class
+            - You can sort the table by `Positive` or `Negative` to surface the strongest signals
+            """)
         else:
             st.warning("No recent Reddit posts found related to this ticker.")
     else:
         st.warning("Enter a stock ticker to analyze Reddit sentiment.")
-
