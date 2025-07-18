@@ -11,6 +11,7 @@ from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from statsmodels.tsa.arima.model import ARIMA
+from xgboost import XGBRegressor
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
@@ -123,26 +124,43 @@ def calculate_macd(df, short=12, long=26, signal=9):
     return df
 
 
-def arima_forecast_streamlit(df, steps=30):
-    series = df['Close']
-    series.index = pd.DatetimeIndex(df.index)
+def xgboost_forecast(df, forecast_days=7):
+    df = df.copy()
+    df = df[["Date", "Close"]].dropna()
+    df["Date"] = pd.to_datetime(df["Date"])
+    df.sort_values("Date", inplace=True)
+    df.reset_index(drop=True, inplace=True)
 
-    # Fit ARIMA model (can tune order if needed)
-    model = ARIMA(series, order=(5, 1, 0))
-    model_fit = model.fit()
+    # Restrict to last 60 days for simplicity
+    df = df[-60:].copy()
+    df["day_num"] = np.arange(len(df))
 
-    forecast_result = model_fit.get_forecast(steps=steps)
-    forecast = forecast_result.predicted_mean
-    conf_int = forecast_result.conf_int()
+    # Create features
+    X = df[["day_num"]]
+    y = df["Close"]
 
+    # Train-test split
+    X_train, X_test = X[:-forecast_days], X[-forecast_days:]
+    y_train = y[:-forecast_days]
+
+    # Train model
+    model = XGBRegressor(n_estimators=100)
+    model.fit(X_train, y_train)
+
+    # Forecast next 7 days
+    future_days = np.arange(len(df), len(df) + forecast_days).reshape(-1, 1)
+    y_pred = model.predict(future_days)
+
+    # Build forecast DataFrame
+    last_date = df["Date"].iloc[-1]
+    future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, forecast_days + 1)]
     forecast_df = pd.DataFrame({
-        "Date": pd.date_range(start=series.index[-1] + pd.Timedelta(days=1), periods=steps),
-        "Forecast": forecast.values,
-        "Lower CI": conf_int.iloc[:, 0].values,
-        "Upper CI": conf_int.iloc[:, 1].values
+        "Date": future_dates,
+        "Forecast": y_pred
     })
 
-    return forecast_df
+    return df[-30:], forecast_df
+
 
 
 # Analysis
@@ -244,7 +262,8 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
-if st.button("📈 Forecast Future Prices"):
+# Forecast with XGBoost
+if st.button("📈 Forecast Price"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
     if df.empty:
@@ -253,23 +272,27 @@ if st.button("📈 Forecast Future Prices"):
         st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
     else:
         try:
-            df_forecast = arima_forecast_streamlit(df.copy(), steps=30)
-            st.subheader("📊 30-Day Price Forecast")
-            st.dataframe(df_forecast)
+            last_30_df, forecast_df = xgboost_forecast(df.copy())
 
-            # Plot forecast
+            st.subheader("📊 Forecasted Prices for Next 7 Days")
+            st.dataframe(forecast_df)
+
+            # Plot actual + forecast
             fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(df_forecast["Date"], df_forecast["Forecast"], label="Forecast", color="blue")
-            ax.fill_between(df_forecast["Date"], df_forecast["Lower CI"], df_forecast["Upper CI"],
-                            color='gray', alpha=0.3, label="Confidence Interval")
 
-            ax.set_title("30-Day ARIMA Forecast")
+            ax.plot(last_30_df["Date"], last_30_df["Close"], label="Actual (Last 30 Days)", color="blue")
+            ax.plot(forecast_df["Date"], forecast_df["Forecast"], label="Forecast (Next 7 Days)", color="orange", linestyle="--")
+
+            ax.set_title("Actual vs Forecasted Closing Prices")
             ax.set_xlabel("Date")
             ax.set_ylabel("Price")
             ax.legend()
+            ax.grid(True)
+
             st.pyplot(fig)
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
+
 
 # Sentiment Analysis
