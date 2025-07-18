@@ -5,12 +5,10 @@ import numpy as np
 from datetime import datetime
 import praw
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pandas.tseries.offsets import BDay
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from prophet import Prophet
-from sklearn.metrics import mean_squared_error
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
+from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 
 
@@ -124,55 +122,58 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
     return df
 
-def arima_forecast(series, steps=30):
-    model = ARIMA(series, order=(5, 1, 0)).fit()
-    forecast = model.forecast(steps=steps)
-    return pd.DataFrame({"Date": forecast.index, "Forecast": forecast.values})
+def lstm_forecast(df, steps=30):
+    from sklearn.preprocessing import MinMaxScaler
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import LSTM, Dense, Dropout
+    from datetime import timedelta
 
-def forecast_ets(series, steps=30):
-    model = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
-    forecast = model.forecast(steps)
-    return pd.DataFrame({"Date": forecast.index, "Forecast": forecast.values})
+    df = df[["Close", "Volume"]].dropna()
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(df)
 
-def forecast_prices(df, steps=30):
-    series = df["Close"].asfreq('D').ffill()
-    train = series[:-steps]
-    test = series[-steps:]
+    sequence_length = 60
+    X, y = [], []
 
-    models = {
-        "ARIMA": arima_forecast,
-        "ETS": forecast_ets
-    }
+    for i in range(sequence_length, len(scaled)):
+        X.append(scaled[i - sequence_length:i])
+        y.append(scaled[i, 0])  # close price
 
-    rmse_results = {}
-    forecasts = {}
+    X, y = np.array(X), np.array(y)
+    split = int(0.8 * len(X))
+    X_train, y_train = X[:split], y[:split]
 
-    for name, model_func in models.items():
-        try:
-            pred_df = model_func(train, steps=steps)
-            pred_df["Date"] = pd.to_datetime(pred_df["Date"])
-            pred_df.set_index("Date", inplace=True)
-            pred_series = pred_df["Forecast"]
+    model = Sequential([
+        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        Dropout(0.2),
+        LSTM(50),
+        Dropout(0.2),
+        Dense(1)
+    ])
 
-            pred_series.index = test.index  # align for RMSE
-            rmse = np.sqrt(mean_squared_error(test, pred_series))
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
 
-            rmse_results[name] = rmse
-            forecasts[name] = pred_df.set_index(test.index)  # align index for later
-        except Exception as e:
-            rmse_results[name] = np.inf
-            print(f"Model {name} failed: {e}")
+    # Forecasting
+    last_seq = scaled[-sequence_length:]
+    forecast = []
+    avg_vol = np.mean(scaled[:, 1])
 
-    best_model = min(rmse_results, key=rmse_results.get)
-    best_forecast = forecasts[best_model]
+    for _ in range(steps):
+        input_seq = last_seq.reshape(1, sequence_length, 2)
+        next_close = model.predict(input_seq, verbose=0)[0][0]
+        next_scaled = np.array([[next_close, avg_vol]])
+        forecast.append(next_scaled[0])
+        last_seq = np.vstack((last_seq[1:], next_scaled))
 
-    forecast_df = pd.DataFrame({
-        "Date": best_forecast.index,
-        "Forecast": best_forecast["Forecast"],
-        "Lower CI": best_forecast["Forecast"] * 0.98,
-        "Upper CI": best_forecast["Forecast"] * 1.02
-    })
+    forecast_array = np.array(forecast)
+    forecast_full = np.column_stack([forecast_array[:, 0], np.full((steps,), avg_vol)])
+    reconstructed = scaler.inverse_transform(forecast_full)[:, 0]
 
+    last_date = df.index[-1] if isinstance(df.index, pd.DatetimeIndex) else pd.to_datetime(df['Date'].iloc[-1])
+    future_dates = [last_date + timedelta(days=i+1) for i in range(steps)]
+
+    forecast_df = pd.DataFrame({"Date": future_dates, "Forecasted Close": reconstructed})
     return forecast_df
 
 
@@ -278,7 +279,7 @@ if st.button("Stock Analysis"):
 
 # Price Forecast
 
-if st.button("📈 Forecast Future Prices"):
+if st.button("📈 Forecast Future Prices (LSTM)"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
     if df.empty:
@@ -287,15 +288,9 @@ if st.button("📈 Forecast Future Prices"):
         st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
     else:
         try:
-            df_forecast = forecast_prices(df.copy(), steps=30)
-
-            # ✅ Ensure 'Date' is a column and correctly named
-            if 'Date' not in df_forecast.columns:
-                df_forecast = df_forecast.reset_index().rename(columns={'index': 'Date'})
-
-            st.subheader("📊 30-Day Price Forecast")
-            st.dataframe(df_forecast)
-
+            df_lstm = lstm_forecast(df.copy(), steps=30)
+            st.subheader("📊 30-Day LSTM Forecast")
+            st.line_chart(df_lstm.set_index("Date")["Forecasted Close"])
+            st.dataframe(df_lstm)
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
-
