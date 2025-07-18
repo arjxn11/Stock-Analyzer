@@ -283,3 +283,5 @@ if st.button("📢 Analyze Reddit Sentiment"):
             st.warning("No recent Reddit posts found related to this ticker.")
     else:
         st.warning("Enter a stock ticker to analyze Reddit sentiment.")
+st.subheader("Debugging secrets:")
+st.json(st.secrets)  # Show all secrets
