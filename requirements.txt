@@ -11,3 +11,4 @@ prophet
 matplotlib
 xgboost
 transformers
+torch
