@@ -134,26 +134,14 @@ def forecast_ets(series, steps=30):
     forecast = model.forecast(steps)
     return pd.DataFrame({"Date": forecast.index, "Forecast": forecast.values})
 
-def forecast_prophet(series, steps=30):
-    df_prophet = series.reset_index()
-    df_prophet.columns = ['ds', 'y']
-    model = Prophet()
-    model.fit(df_prophet)
-    future = model.make_future_dataframe(periods=steps)
-    forecast = model.predict(future)
-    forecast = forecast[['ds', 'yhat']].rename(columns={'ds': 'Date', 'yhat': 'Forecast'})
-    return forecast.tail(steps)
-
-
 def forecast_prices(df, steps=30):
-    series = df.set_index("Date")["Close"].asfreq('D').ffill()
+    series = df["Close"].asfreq('D').ffill()
     train = series[:-steps]
     test = series[-steps:]
 
     models = {
         "ARIMA": arima_forecast,
-        "ETS": forecast_ets,
-        "Prophet": forecast_prophet
+        "ETS": forecast_ets
     }
 
     rmse_results = {}
@@ -185,7 +173,6 @@ def forecast_prices(df, steps=30):
         "Upper CI": best_forecast["Forecast"] * 1.02
     })
 
-    st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
     return forecast_df
 
 
