@@ -272,34 +272,26 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
-# Forecast with XGBoost
+
 if st.button("📈 Forecast Price"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time).reset_index()
 
     if df.empty:
-        st.warning("⚠️ No data available to forecast. Please check ticker and date range.")
-    elif int_time not in ["1d", "1wk"]:
-        st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
+        st.warning("⚠️ No data available to forecast.")
+    elif not {"Date", "Close"}.issubset(df.columns):
+        st.error("❌ Data must contain 'Date' and 'Close' columns.")
     else:
         try:
-            last_30_df, forecast_df = xgboost_forecast(df.copy())
+            hist_df, forecast_df = xgboost_forecast(df)
 
-            st.subheader("📊 Forecasted Prices for Next 7 Days")
-            st.dataframe(forecast_df)
+            # Combine historical and forecast
+            combined = pd.concat([
+                hist_df[["Date", "Close"]].rename(columns={"Close": "Price"}),
+                forecast_df.rename(columns={"Forecast": "Price"})
+            ])
 
-            # Plot actual + forecast
-            fig, ax = plt.subplots(figsize=(12, 5))
-
-            ax.plot(last_30_df["Date"], last_30_df["Close"], label="Actual (Last 30 Days)", color="blue")
-            ax.plot(forecast_df["Date"], forecast_df["Forecast"], label="Forecast (Next 7 Days)", color="orange", linestyle="--")
-
-            ax.set_title("Actual vs Forecasted Closing Prices")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price")
-            ax.legend()
-            ax.grid(True)
-
-            st.pyplot(fig)
+            # Plot
+            st.line_chart(combined.set_index("Date"))
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
