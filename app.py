@@ -125,14 +125,14 @@ def calculate_macd(df, short=12, long=26, signal=9):
     return df
 
 def arima_forecast(series, steps=30):
-    model=ARIMA(series, order=(5,1,0)).fit() # 5 autoregressive terms (lags), the series is differenced 1 time to make it stationary, and has 0 moving average terms (error lags)
-    forecast=model.forecast(steps=steps)
-    return forecast 
+    model = ARIMA(series, order=(5, 1, 0)).fit()
+    forecast = model.forecast(steps=steps)
+    return pd.DataFrame({"Date": forecast.index, "Forecast": forecast.values})
 
 def forecast_ets(series, steps=30):
     model = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
     forecast = model.forecast(steps)
-    return forecast
+    return pd.DataFrame({"Date": forecast.index, "Forecast": forecast.values})
 
 def forecast_prophet(series, steps=30):
     df_prophet = series.reset_index()
@@ -141,13 +141,12 @@ def forecast_prophet(series, steps=30):
     model.fit(df_prophet)
     future = model.make_future_dataframe(periods=steps)
     forecast = model.predict(future)
-    return forecast[['ds', 'yhat']].set_index('ds')['yhat'][-steps:]
+    forecast = forecast[['ds', 'yhat']].rename(columns={'ds': 'Date', 'yhat': 'Forecast'})
+    return forecast.tail(steps)
+
 
 def forecast_prices(df, steps=30):
-    # Ensure 'Date' is the index and convert to daily frequency
     series = df.set_index("Date")["Close"].asfreq('D').ffill()
-
-    # Split into training and testing sets
     train = series[:-steps]
     test = series[-steps:]
 
@@ -160,43 +159,35 @@ def forecast_prices(df, steps=30):
     rmse_results = {}
     forecasts = {}
 
-    # Evaluate each model
     for name, model_func in models.items():
         try:
-            pred = model_func(train, steps=steps)
-            pred.index = test.index  # align index for RMSE
-            rmse = np.sqrt(mean_squared_error(test, pred))
+            pred_df = model_func(train, steps=steps)
+            pred_df["Date"] = pd.to_datetime(pred_df["Date"])
+            pred_df.set_index("Date", inplace=True)
+            pred_series = pred_df["Forecast"]
+
+            pred_series.index = test.index  # align for RMSE
+            rmse = np.sqrt(mean_squared_error(test, pred_series))
+
             rmse_results[name] = rmse
-            forecasts[name] = pred
+            forecasts[name] = pred_df.set_index(test.index)  # align index for later
         except Exception as e:
             rmse_results[name] = np.inf
             print(f"Model {name} failed: {e}")
 
-    # Choose the best model based on RMSE
     best_model = min(rmse_results, key=rmse_results.get)
     best_forecast = forecasts[best_model]
 
-    # Create forecast output DataFrame with confidence intervals
-# Create forecast output DataFrame with confidence intervals
     forecast_df = pd.DataFrame({
-        "Forecast": best_forecast.values,
-        "Lower CI": best_forecast.values * 0.98,
-        "Upper CI": best_forecast.values * 1.02
-    }, index=best_forecast.index)
-
-    forecast_df.index.name = "Date"  # <- This line is crucial
-    forecast_df = forecast_df.reset_index()  # Now 'Date' is a proper column
-
-
-    # Optionally ensure Date type
-    forecast_df["Date"] = pd.to_datetime(forecast_df["Date"])
-
+        "Date": best_forecast.index,
+        "Forecast": best_forecast["Forecast"],
+        "Lower CI": best_forecast["Forecast"] * 0.98,
+        "Upper CI": best_forecast["Forecast"] * 1.02
+    })
 
     st.write(f"✅ Best model: **{best_model}** (RMSE: {rmse_results[best_model]:.2f})")
-    st.write("🧾 Forecast Data Preview")
-    st.dataframe(forecast_df)
-
     return forecast_df
+
 
 
 
