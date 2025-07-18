@@ -126,34 +126,44 @@ def calculate_macd(df, short=12, long=26, signal=9):
 
 def xgboost_forecast(df, forecast_days=7):
     df = df.copy()
-    df = df[["Date", "Close"]].dropna()
+
+    # Ensure Date is a column
+    if df.index.name == "Date":
+        df = df.reset_index()
+
+    # Safety check
+    if not {"Date", "Close"}.issubset(df.columns):
+        raise ValueError("Input DataFrame must contain 'Date' and 'Close' columns.")
+
     df["Date"] = pd.to_datetime(df["Date"])
+    df = df[["Date", "Close"]].dropna()
     df.sort_values("Date", inplace=True)
     df.reset_index(drop=True, inplace=True)
 
-    # Restrict to last 60 days for simplicity
+    # Limit to recent history
     df = df[-60:].copy()
     df["day_num"] = np.arange(len(df))
 
-    # Create features
+    # Prepare data
     X = df[["day_num"]]
     y = df["Close"]
 
     # Train-test split
-    X_train, X_test = X[:-forecast_days], X[-forecast_days:]
+    X_train = X[:-forecast_days]
     y_train = y[:-forecast_days]
 
-    # Train model
+    # Train XGBoost model
     model = XGBRegressor(n_estimators=100)
     model.fit(X_train, y_train)
 
-    # Forecast next 7 days
+    # Forecast future
     future_days = np.arange(len(df), len(df) + forecast_days).reshape(-1, 1)
     y_pred = model.predict(future_days)
 
-    # Build forecast DataFrame
+    # Create date range for forecast
     last_date = df["Date"].iloc[-1]
     future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, forecast_days + 1)]
+
     forecast_df = pd.DataFrame({
         "Date": future_dates,
         "Forecast": y_pred
@@ -264,7 +274,7 @@ if st.button("Stock Analysis"):
 # Price Forecast
 # Forecast with XGBoost
 if st.button("📈 Forecast Price"):
-    df = get_stock_data(tkr, st_dt, en_dt, int_time)
+    df = get_stock_data(tkr, st_dt, en_dt, int_time).reset_index()
 
     if df.empty:
         st.warning("⚠️ No data available to forecast. Please check ticker and date range.")
