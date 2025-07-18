@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
-st.title("📊 Stock Analyzer (Quantitative, Sentiments, and Time Series Forecasting")
+st.title("📊 Stock Analyzer (Quantitative, Sentiments, and Time Series Forecasting)")
 
 # Request and receive user inputs
 tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
