@@ -7,7 +7,9 @@ import praw
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from pandas.tseries.offsets import BDay
 import matplotlib.pyplot as plt
-
+from xgboost import XGBRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative and Sentiments)")
@@ -120,7 +122,53 @@ def calculate_macd(df, short=12, long=26, signal=9):
     return df
 
 
+def forecast_xgboost(df, steps=30):
+    df = df.copy()
+    df = df[['Close', 'Volume']].dropna()
 
+    # Create lag features
+    for lag in range(1, 8):
+        df[f'lag_{lag}'] = df['Close'].shift(lag)
+    
+    df.dropna(inplace=True)
+
+    # Target is the 'Close' price
+    X = df.drop(['Close'], axis=1)
+    y = df['Close']
+
+    # Train-test split (80-20)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
+
+    model = XGBRegressor(n_estimators=100)
+    model.fit(X_train, y_train)
+
+    # Forecast next N steps iteratively
+    last_row = X.iloc[-1:].copy()
+    preds = []
+
+    for _ in range(steps):
+        pred = model.predict(last_row)[0]
+        preds.append(pred)
+
+        # Shift lag features forward
+        new_row = last_row.copy()
+        for lag in range(7, 1, -1):
+            new_row[f'lag_{lag}'] = new_row[f'lag_{lag-1}']
+        new_row['lag_1'] = pred
+        new_row['Volume'] = last_row['Volume'].values[0]  # Keep volume constant for simplicity
+
+        last_row = new_row
+
+    # Generate forecast dates
+    last_date = df.index[-1]
+    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=steps, freq='B')
+
+    forecast_df = pd.DataFrame({
+        'Date': forecast_dates,
+        'Forecast': preds
+    })
+
+    return forecast_df
 
 # Analysis
 if st.button("Stock Analysis"):
@@ -221,6 +269,31 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
+if st.button("📈 Forecast Future Prices"):
+    df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
+    if df.empty:
+        st.warning("⚠️ No data available to forecast. Please check ticker and date range.")
+    elif int_time not in ["1d", "1wk"]:
+        st.warning("⚠️ Forecasting is supported only for daily or weekly intervals. Please select '1d' or '1wk'.")
+    else:
+        try:
+            df.set_index("Date", inplace=True)
+            forecast_df = forecast_xgboost(df, steps=30)
+
+            st.subheader("📊 30-Day Price Forecast (XGBoost)")
+            st.dataframe(forecast_df)
+
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(forecast_df["Date"], forecast_df["Forecast"], label="Forecast", color="green")
+            ax.set_title("📈 30-Day Forecasted Prices")
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Price")
+            ax.grid(True)
+            ax.legend()
+            st.pyplot(fig)
+
+        except Exception as e:
+            st.error(f"❌ Forecasting failed: {e}")
 
 # Sentiment Analysis
