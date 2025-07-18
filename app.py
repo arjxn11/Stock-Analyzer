@@ -295,6 +295,7 @@ if st.button("📢 Analyze Reddit Sentiment"):
             st.metric(label="Avg Positive Score", value=f"{avg_positive:.3f}")
             st.metric(label="Avg Negative Score", value=f"{avg_negative:.3f}")
             st.metric(label="Avg Neutral Score", value=f"{avg_neutral:.3f}")
+            st.markdown("**Note:** Avg Positive Score=0.15 means that the model sees a low chance of positive sentiment in posts.")
 
             st.write(sentiment_counts.rename("Count").to_frame())
 
