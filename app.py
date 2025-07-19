@@ -122,6 +122,7 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['MACD'] = df['EMA_short'] - df['EMA_long']
     df['Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
     df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
+    df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
 @st.cache_resource
@@ -241,8 +242,8 @@ if st.button("Stock Analysis"):
 
 
         # Plot line chart
-        plot_cols = ["Close", "VWAP", "TWAP"]
-        macd_cols= ["MACD", "Signal_Line"]
+        plot_cols = ["Close", "VWAP", "TWAP", "EMA_200"]
+        macd_cols= ["MACD", "Signal_Line", "MACD_Hist"]
 
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price, RSI & MACD Overview")
@@ -252,6 +253,8 @@ if st.button("Stock Analysis"):
             st.markdown("""
             - **VWAP < TWAP**: Indicates that more volume was traded at lower prices.  
             VWAP is often used by institutions to evaluate trading efficiency, while TWAP is used in execution algorithms to slice orders evenly over time.
+                        
+            - The 200 day EMA is used together with the MACD indicator to identify good opportunities to open long or short positions on a stock
 
             - **RSI (Relative Strength Index)**:  
             RSI is a momentum oscillator ranging from 0 to 100. Values **above 70** indicate *overbought* conditions (possible pullback), while **below 30** suggests *oversold* (potential rebound).  
@@ -261,9 +264,23 @@ if st.button("Stock Analysis"):
             st.warning("⚠️ One of Close/VWAP/TWAP/RSI/MACD/Signal_Line contains only NaNs — cannot plot.")
         if df[macd_cols].notna().any().all():
             st.subheader("📉 MACD & Signal Line")
-            st.line_chart(df.set_index("Date")[macd_cols])
-        else: 
-            st.warning("⚠️ One of MACD/Signal_Line contains only NaNs — cannot plot.")
+
+            fig, ax = plt.subplots(figsize=(14, 5))
+            df_macd = df.set_index("Date")[macd_cols].dropna()
+
+            ax.plot(df_macd.index, df_macd['MACD'], label='MACD', color='blue')
+            ax.plot(df_macd.index, df_macd['Signal_Line'], label='Signal Line', color='orange')
+            ax.bar(df_macd.index, df_macd['MACD_Hist'], label='MACD Histogram', color='gray', alpha=0.4)
+
+            ax.set_title("MACD Indicator")
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Value")
+            ax.grid(True)
+            ax.legend()
+
+            st.pyplot(fig)
+        else:
+            st.warning("⚠️ Unable to plot MACD: one or more columns contain only NaN values.")
         st.markdown("MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.")
         # Explaination
         st.markdown("""
