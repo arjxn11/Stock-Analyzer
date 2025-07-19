@@ -125,6 +125,39 @@ def calculate_macd(df, short=12, long=26, signal=9):
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
+def plot_macd_dark(df):
+    macd_cols = ["MACD", "Signal_Line", "MACD_Hist"]
+    df_macd = df.set_index("Date")[macd_cols].dropna()
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+
+    # Set dark background
+    fig.patch.set_facecolor('black')
+    ax.set_facecolor('black')
+
+    # Plot MACD and Signal Line
+    ax.plot(df_macd.index, df_macd['MACD'], label='MACD', color='blue', linewidth=1.5)
+    ax.plot(df_macd.index, df_macd['Signal_Line'], label='Signal Line', color='orange', linewidth=1.5)
+
+    # Green for positive hist, red for negative
+    colors = ['green' if val >= 0 else 'red' for val in df_macd['MACD_Hist']]
+    ax.bar(df_macd.index, df_macd['MACD_Hist'], color=colors, alpha=0.7, label='MACD Histogram', width=1)
+
+    # Remove grid and style text
+    ax.grid(False)
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white')
+    ax.xaxis.label.set_color('white')
+    ax.yaxis.label.set_color('white')
+    ax.title.set_color('white')
+    ax.legend(facecolor='black', edgecolor='white', labelcolor='white')
+
+    ax.set_title("MACD Indicator")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Value")
+
+    return fig
+
 @st.cache_resource
 def load_finbert():
     tokenizer = BertTokenizer.from_pretrained("ProsusAI/finbert")
@@ -264,23 +297,9 @@ if st.button("Stock Analysis"):
             st.warning("⚠️ One of Close/VWAP/TWAP/RSI/MACD/Signal_Line contains only NaNs — cannot plot.")
         if df[macd_cols].notna().any().all():
             st.subheader("📉 MACD & Signal Line")
-
-            fig, ax = plt.subplots(figsize=(14, 5))
-            df_macd = df.set_index("Date")[macd_cols].dropna()
-
-            ax.plot(df_macd.index, df_macd['MACD'], label='MACD', color='blue')
-            ax.plot(df_macd.index, df_macd['Signal_Line'], label='Signal Line', color='orange')
-            ax.bar(df_macd.index, df_macd['MACD_Hist'], label='MACD Histogram', color='gray', alpha=0.4)
-
-            ax.set_title("MACD Indicator")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Value")
-            ax.grid(True)
-            ax.legend()
-
-            st.pyplot(fig)
+            st.pyplot(plot_macd_dark(df))
         else:
-            st.warning("⚠️ Unable to plot MACD: one or more columns contain only NaN values.")
+            st.warning("⚠️ One or more of MACD components contain only NaNs — cannot plot.")
         st.markdown("MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.")
         # Explaination
         st.markdown("""
