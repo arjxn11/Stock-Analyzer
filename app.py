@@ -19,7 +19,7 @@ st.title("📊 Stock Analyzer (Quantitative, Sentiments, and Time Series Forecas
 
 # Request and receive user inputs
 tkr = st.text_input("Enter stock ticker (e.g., AAPL, NVDA):").upper().strip()
-st_dt = st.date_input("Start Date", value=pd.to_datetime("2023-01-01"))
+st_dt = st.date_input("Start Date", value=pd.to_datetime("2024-06-01"))
 en_dt = st.date_input("End Date", value=datetime.today())
 int_time = st.selectbox(
     "Select time interval:",
