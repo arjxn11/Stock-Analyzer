@@ -13,6 +13,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from transformers import BertTokenizer, BertForSequenceClassification, pipeline
 import torch
 import torch.nn.functional as F
+from prophet import Prophet
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 st.title("📊 Stock Analyzer (Quantitative, Sentiments, and Time Series Forecasting)")
@@ -211,6 +212,18 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
 
     return pd.DataFrame(rows)
 
+# Forecast using Prophet (Facebook)
+def forecast_prophet(df, periods=7):
+    df = df.reset_index()
+    df_prophet = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
+
+    model = Prophet(daily_seasonality=True)
+    model.fit(df_prophet)
+
+    future = model.make_future_dataframe(periods=periods)
+    forecast = model.predict(future)
+
+    return forecast, model, df_prophet
 
 # Analysis
 if st.button("Stock Analysis"):
@@ -314,8 +327,35 @@ if st.button("Stock Analysis"):
 
 # Price Forecast
 if st.button("📊Price Forecast"):
-    st.markdown("This Model is currently being constructed. We are working on getting this live and running for your use ASAP! Thank you for your patience!")
+    df = get_stock_data(tkr, st_dt, en_dt, int_time)
+    if df.empty:
+        st.warning("No stock data available.")
+    else:
+        forecast, model, df_prophet = forecast_prophet(df, periods=7)
 
+        st.subheader("📈 Forecast: Historical vs Predicted (Prophet)")
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        # Plot historical data
+        ax.plot(df_prophet['ds'], df_prophet['y'], label="Actual Close", color='blue')
+
+        # Plot forecasted trend
+        ax.plot(forecast['ds'], forecast['yhat'], label="Forecast", color='orange')
+
+        # Confidence interval
+        ax.fill_between(forecast['ds'], forecast['yhat_lower'], forecast['yhat_upper'], color='orange', alpha=0.2)
+
+        ax.set_title(f"{tkr} — Prophet Forecast (Next 7 Days)")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.legend()
+        st.pyplot(fig)
+
+        st.markdown("""
+        - **Blue Line**: Actual historical closing prices  
+        - **Orange Line**: Prophet forecast  
+        - **Shaded Area**: 80% confidence interval for the forecast  
+        """)
 # Sentiment Analysis
 
 if st.button("📢 Analyze Reddit Sentiment"):
