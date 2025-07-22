@@ -217,18 +217,20 @@ def forecast_arima(df, steps=7):
     df = df.copy().reset_index()
     df = df[['Date', 'Close']].dropna()
     df.set_index('Date', inplace=True)
-    df = df.asfreq('B')  # ensure business day frequency
+    df = df.asfreq('B')  # business day frequency
 
-    # Fill missing values (required for ARIMA)
-    df['Close'] = df['Close'].interpolate()
+    df['Close'] = df['Close'].interpolate()  # fill missing values
 
-    model = ARIMA(df['Close'], order=(5, 1, 0))  # (p,d,q)
+    model = ARIMA(df['Close'], order=(5, 1, 0))
     model_fit = model.fit()
 
-    forecast = model_fit.forecast(steps=steps)
+    forecast_res = model_fit.get_forecast(steps=steps)
+    forecast = forecast_res.predicted_mean
+    conf_int = forecast_res.conf_int()
+
     forecast_dates = pd.date_range(start=df.index[-1] + BDay(1), periods=steps, freq='B')
 
-    return df['Close'], forecast, forecast_dates
+    return df['Close'], forecast, forecast_dates, conf_int
 
 # Analysis
 if st.button("Stock Analysis"):
@@ -333,24 +335,50 @@ if st.button("Stock Analysis"):
 # Price Forecast
 if st.button("📊Price Forecast"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
+
     if df.empty or df['Close'].dropna().shape[0] < 30:
         st.warning("Not enough data to forecast.")
     else:
-        actual, forecast, forecast_dates = forecast_arima(df, steps=7)
+        actual, forecast, forecast_dates, conf_int = forecast_arima(df, steps=7)
 
-        st.subheader("📈 ARIMA Forecast (Next 7 Days)")
+        st.subheader("📈 ARIMA Forecast (Next 7 Business Days)")
         fig, ax = plt.subplots(figsize=(12, 6))
-        actual.plot(ax=ax, label="Historical Close", color='blue')
-        ax.plot(forecast_dates, forecast, label="Forecast", color='orange', linestyle='--', marker='o')
-        ax.set_title(f"{tkr} — ARIMA Price Forecast")
+
+        # Plot actual historical prices
+        ax.plot(actual.index, actual, label="Historical Close", color='blue', linewidth=2)
+
+        # Plot forecast
+        ax.plot(forecast_dates, forecast, label="Forecast", color='orange', linestyle='--', marker='o', markersize=6, linewidth=2)
+
+        # Plot confidence interval
+        ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='orange', alpha=0.2, label="Confidence Interval")
+
+        # Chart aesthetics
+        ax.set_title(f"{tkr} — ARIMA Price Forecast", fontsize=14)
         ax.set_xlabel("Date")
         ax.set_ylabel("Price")
         ax.legend()
+        ax.grid(True)
+
+        # Adding dark theme to make it more visible
+        ax.set_facecolor('black')
+        fig.patch.set_facecolor('black')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.legend(facecolor='black', edgecolor='white', labelcolor='white')
+
         st.pyplot(fig)
 
-        st.markdown("Forecast is based on an ARIMA(5,1,0) model — suitable for short-term stock price trends.")
+        st.markdown("""
+        - **Blue Line**: Historical closing prices  
+        - **Orange Line**: ARIMA forecast with visible markers  
+        - **Shaded Region**: 95% confidence interval  
+        """)
 
-        
+
+
 # Sentiment Analysis
 
 if st.button("📢 Analyze Reddit Sentiment"):
