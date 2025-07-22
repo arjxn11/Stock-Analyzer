@@ -213,26 +213,22 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
     return pd.DataFrame(rows)
 
 # Forecast using Prophet (Facebook)
-def forecast_prophet(df, periods=7):
-    df = df.reset_index()
+def forecast_arima(df, steps=7):
+    df = df.copy().reset_index()
+    df = df[['Date', 'Close']].dropna()
+    df.set_index('Date', inplace=True)
+    df = df.asfreq('B')  # ensure business day frequency
 
-    # Check if 'Close' exists and has valid values
-    if 'Close' not in df.columns or df['Close'].dropna().empty:
-        raise ValueError("❌ 'Close' column is missing or contains only NaNs.")
+    # Fill missing values (required for ARIMA)
+    df['Close'] = df['Close'].interpolate()
 
-    df_prophet = df[["Date", "Close"]].dropna().rename(columns={"Date": "ds", "Close": "y"})
+    model = ARIMA(df['Close'], order=(5, 1, 0))  # (p,d,q)
+    model_fit = model.fit()
 
-    if df_prophet.empty:
-        raise ValueError("❌ Dataframe is empty. Check your ticker or date range.")
-    if df_prophet["y"].isna().all():
-        raise ValueError("❌ All values in 'y' (Close) are NaN. Cannot fit model.")
-    model = Prophet(daily_seasonality=True)
-    model.fit(df_prophet)
+    forecast = model_fit.forecast(steps=steps)
+    forecast_dates = pd.date_range(start=df.index[-1] + BDay(1), periods=steps, freq='B')
 
-    future = model.make_future_dataframe(periods=periods)
-    forecast = model.predict(future)
-
-    return forecast, model, df_prophet
+    return df['Close'], forecast, forecast_dates
 
 # Analysis
 if st.button("Stock Analysis"):
@@ -337,34 +333,24 @@ if st.button("Stock Analysis"):
 # Price Forecast
 if st.button("📊Price Forecast"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
-    if df.empty:
-        st.warning("No stock data available.")
+    if df.empty or df['Close'].dropna().shape[0] < 30:
+        st.warning("Not enough data to forecast.")
     else:
-        forecast, model, df_prophet = forecast_prophet(df, periods=7)
+        actual, forecast, forecast_dates = forecast_arima(df, steps=7)
 
-        st.subheader("📈 Forecast: Historical vs Predicted (Prophet)")
+        st.subheader("📈 ARIMA Forecast (Next 7 Days)")
         fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Plot historical data
-        ax.plot(df_prophet['ds'], df_prophet['y'], label="Actual Close", color='blue')
-
-        # Plot forecasted trend
-        ax.plot(forecast['ds'], forecast['yhat'], label="Forecast", color='orange')
-
-        # Confidence interval
-        ax.fill_between(forecast['ds'], forecast['yhat_lower'], forecast['yhat_upper'], color='orange', alpha=0.2)
-
-        ax.set_title(f"{tkr} — Prophet Forecast (Next 7 Days)")
+        actual.plot(ax=ax, label="Historical Close", color='blue')
+        ax.plot(forecast_dates, forecast, label="Forecast", color='orange', linestyle='--', marker='o')
+        ax.set_title(f"{tkr} — ARIMA Price Forecast")
         ax.set_xlabel("Date")
         ax.set_ylabel("Price")
         ax.legend()
         st.pyplot(fig)
 
-        st.markdown("""
-        - **Blue Line**: Actual historical closing prices  
-        - **Orange Line**: Prophet forecast  
-        - **Shaded Area**: 80% confidence interval for the forecast  
-        """)
+        st.markdown("Forecast is based on an ARIMA(5,1,0) model — suitable for short-term stock price trends.")
+
+        
 # Sentiment Analysis
 
 if st.button("📢 Analyze Reddit Sentiment"):
