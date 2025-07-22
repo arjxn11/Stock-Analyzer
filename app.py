@@ -215,7 +215,15 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
 # Forecast using Prophet (Facebook)
 def forecast_prophet(df, periods=7):
     df = df.reset_index()
-    df_prophet = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
+
+    # Check if 'Close' exists and has valid values
+    if 'Close' not in df.columns or df['Close'].dropna().empty:
+        raise ValueError("❌ 'Close' column is missing or contains only NaNs.")
+
+    df_prophet = df[["Date", "Close"]].dropna().rename(columns={"Date": "ds", "Close": "y"})
+
+    if df_prophet.empty or df_prophet["y"].isna().all():
+        raise ValueError("❌ Not enough data to fit the model. Check your ticker and date range.")
 
     model = Prophet(daily_seasonality=True)
     model.fit(df_prophet)
