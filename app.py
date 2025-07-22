@@ -33,36 +33,20 @@ st.markdown("Note: Some tickers may not provide data for all intervals. Try 30m,
 # Get data
 @st.cache_data
 def get_stock_data(ticker, start, end, interval):
-    if not ticker:
+    if ticker == "":
         return pd.DataFrame()
+    
+    df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+    df.dropna(inplace=True)
 
-    try:
-        df = yf.download(
-            tickers=ticker,
-            start=start,
-            end=end,
-            interval=interval,
-            progress=False,
-            auto_adjust=True,
-            threads=True
-        )
-        if df.empty or df.isna().all().all():
-            st.warning(f"⚠️ No data returned for `{ticker}`. Try a different interval like `1d`, `1wk`, or a different ticker.")
-            return pd.DataFrame()
+    # Normalize datetime index
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    df = df.rename_axis("Date").reset_index()
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.sort_values('Date', inplace=True)
+    df.set_index('Date', inplace=True)
 
-        df.dropna(inplace=True)
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-        df = df.rename_axis("Date").reset_index()
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.sort_values('Date', inplace=True)
-        df.set_index('Date', inplace=True)
-        return df
-
-    except Exception as e:
-        st.error(f"❌ Failed to download data for `{ticker}`: {e}")
-        return pd.DataFrame()
-
-
+    return df
 
 
 # VWAP and TWAP calculations
