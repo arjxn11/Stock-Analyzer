@@ -222,9 +222,10 @@ def forecast_prophet(df, periods=7):
 
     df_prophet = df[["Date", "Close"]].dropna().rename(columns={"Date": "ds", "Close": "y"})
 
-    if df_prophet.empty or df_prophet["y"].isna().all():
-        raise ValueError("❌ Not enough data to fit the model. Check your ticker and date range.")
-
+    if df_prophet.empty:
+        raise ValueError("❌ Dataframe is empty. Check your ticker or date range.")
+    if df_prophet["y"].isna().all():
+        raise ValueError("❌ All values in 'y' (Close) are NaN. Cannot fit model.")
     model = Prophet(daily_seasonality=True)
     model.fit(df_prophet)
 
