@@ -212,30 +212,30 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
 
     return pd.DataFrame(rows)
 
-# Forecast using ARIMA 
-def forecast_arima(df, steps=7):
-    df = df.copy().reset_index()
-    df = df[['Date', 'Close']].dropna()
-    df.set_index('Date', inplace=True)
-    df = df.asfreq('B')
-    df['Close'] = df['Close'].interpolate()
+# # Forecast using ARIMA 
+# def forecast_arima(df, steps=7):
+#     df = df.copy().reset_index()
+#     df = df[['Date', 'Close']].dropna()
+#     df.set_index('Date', inplace=True)
+#     df = df.asfreq('B')
+#     df['Close'] = df['Close'].interpolate()
 
-    model = ARIMA(df['Close'], order=(5, 1, 0))
-    model_fit = model.fit()
+#     model = ARIMA(df['Close'], order=(5, 1, 0))
+#     model_fit = model.fit()
 
-    forecast_res = model_fit.get_forecast(steps=steps)
-    forecast = forecast_res.predicted_mean
-    conf_int = forecast_res.conf_int()
-    forecast_dates = pd.date_range(start=df.index[-1] + BDay(1), periods=steps, freq='B')
+#     forecast_res = model_fit.get_forecast(steps=steps)
+#     forecast = forecast_res.predicted_mean
+#     conf_int = forecast_res.conf_int()
+#     forecast_dates = pd.date_range(start=df.index[-1] + BDay(1), periods=steps, freq='B')
 
-    forecast_df = pd.DataFrame({
-        "Forecast Date": forecast_dates,
-        "Predicted Close": forecast.values,
-        "Lower Bound (95%)": conf_int.iloc[:, 0].values,
-        "Upper Bound (95%)": conf_int.iloc[:, 1].values
-    })
+#     forecast_df = pd.DataFrame({
+#         "Forecast Date": forecast_dates,
+#         "Predicted Close": forecast.values,
+#         "Lower Bound (95%)": conf_int.iloc[:, 0].values,
+#         "Upper Bound (95%)": conf_int.iloc[:, 1].values
+#     })
 
-    return df['Close'], forecast, forecast_dates, conf_int, forecast_df
+#     return df['Close'], forecast, forecast_dates, conf_int, forecast_df
 
 # Analysis
 if st.button("Stock Analysis"):
@@ -338,58 +338,58 @@ if st.button("Stock Analysis"):
         """)
 
 # Price Forecast
-if st.button("📊Price Forecast"):
-    df = get_stock_data(tkr, st_dt, en_dt, int_time)
+# if st.button("📊Price Forecast"):
+#     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
-    if df.empty or df['Close'].dropna().shape[0] < 30:
-        st.warning("Not enough data to forecast.")
-    else:
-        actual, forecast, forecast_dates, conf_int, forecast_df = forecast_arima(df, steps=7)
+#     if df.empty or df['Close'].dropna().shape[0] < 30:
+#         st.warning("Not enough data to forecast.")
+#     else:
+#         actual, forecast, forecast_dates, conf_int, forecast_df = forecast_arima(df, steps=7)
 
-        st.subheader("📈 ARIMA Forecast (Next 7 Business Days)")
-        fig, ax = plt.subplots(figsize=(12, 6))
+#         st.subheader("📈 ARIMA Forecast (Next 7 Business Days)")
+#         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Plot: Historical data
-        ax.plot(actual.index, actual, label="Historical Close", color='cyan', linewidth=2)
+#         # Plot: Historical data
+#         ax.plot(actual.index, actual, label="Historical Close", color='cyan', linewidth=2)
 
-        # Plot: Forecast with markers
-        ax.plot(forecast_dates, forecast, label="Forecast", color='orange', linestyle='--', marker='o', markersize=6, linewidth=2)
+#         # Plot: Forecast with markers
+#         ax.plot(forecast_dates, forecast, label="Forecast", color='orange', linestyle='--', marker='o', markersize=6, linewidth=2)
 
-        # Plot: Confidence interval shading
-        ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='orange', alpha=0.3, label="95% Confidence Interval")
+#         # Plot: Confidence interval shading
+#         ax.fill_between(forecast_dates, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='orange', alpha=0.3, label="95% Confidence Interval")
 
-        # Dark theme styling
-        ax.set_facecolor('black')
-        fig.patch.set_facecolor('black')
-        ax.tick_params(colors='white')
-        ax.xaxis.label.set_color('white')
-        ax.yaxis.label.set_color('white')
-        ax.title.set_color('white')
-        ax.legend(facecolor='black', edgecolor='white', labelcolor='white')
+#         # Dark theme styling
+#         ax.set_facecolor('black')
+#         fig.patch.set_facecolor('black')
+#         ax.tick_params(colors='white')
+#         ax.xaxis.label.set_color('white')
+#         ax.yaxis.label.set_color('white')
+#         ax.title.set_color('white')
+#         ax.legend(facecolor='black', edgecolor='white', labelcolor='white')
 
-        ax.set_title(f"{tkr} — ARIMA Price Forecast", fontsize=14)
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Price")
-        ax.grid(True)
+#         ax.set_title(f"{tkr} — ARIMA Price Forecast", fontsize=14)
+#         ax.set_xlabel("Date")
+#         ax.set_ylabel("Price")
+#         ax.grid(True)
 
-        st.pyplot(fig)
+#         st.pyplot(fig)
 
-        st.markdown("""
-        - **Cyan Line**: Historical closing prices  
-        - **Orange Dashed Line**: ARIMA forecast with visible markers  
-        - **Shaded Region**: 95% confidence interval  
-        """)
+#         st.markdown("""
+#         - **Cyan Line**: Historical closing prices  
+#         - **Orange Dashed Line**: ARIMA forecast with visible markers  
+#         - **Shaded Region**: 95% confidence interval  
+#         """)
 
-        # Display Forecast Table
-        st.markdown("### 📋 Forecast Table")
-        forecast_df["Forecast Date"] = forecast_df["Forecast Date"].dt.strftime('%Y-%m-%d')
-        st.dataframe(
-            forecast_df.set_index("Forecast Date").style.format({
-                "Predicted Close": "{:.2f}",
-                "Lower Bound (95%)": "{:.2f}",
-                "Upper Bound (95%)": "{:.2f}"
-            })
-        )
+#         # Display Forecast Table
+#         st.markdown("### 📋 Forecast Table")
+#         forecast_df["Forecast Date"] = forecast_df["Forecast Date"].dt.strftime('%Y-%m-%d')
+#         st.dataframe(
+#             forecast_df.set_index("Forecast Date").style.format({
+#                 "Predicted Close": "{:.2f}",
+#                 "Lower Bound (95%)": "{:.2f}",
+#                 "Upper Bound (95%)": "{:.2f}"
+#             })
+#         )
 
 
 # Sentiment Analysis
