@@ -354,13 +354,13 @@ if st.button("📢 Analyze Reddit Sentiment"):
         st.warning("Enter a stock ticker to analyze Reddit sentiment.")
 
 # ======================
-# 📈 Portfolio Risk Simulation + Backtest (with form)
+# 📈 Portfolio Risk Simulation + Backtest (with form & Adj Close fix)
 # ======================
 with st.form("portfolio_form"):
     st.subheader("Portfolio Monte Carlo Simulation + Backtest")
 
     tickers_input = st.text_input("Enter tickers separated by commas (e.g. AAPL, MSFT, NVDA):").upper().strip()
-    weights_input = st.text_input("Enter weights (comma-separated, must sum to 1):", "0.5,0.5")
+    weights_input = st.text_input("Enter weights of each stock (comma-separated, must sum to 1):", "0.5,0.5")
 
     submitted = st.form_submit_button("💼 Run Portfolio Simulation")
 
@@ -379,16 +379,23 @@ if submitted:
         if len(weights) != len(tickers) or not np.isclose(sum(weights), 1):
             st.error("❌ Number of weights must match tickers and sum to 1.")
         else:
-            # Download historical data
-            data = yf.download(tickers, start=st_dt, end=en_dt)['Adj Close']
+            # ✅ Download historical data
+            raw_data = yf.download(tickers, start=st_dt, end=en_dt)
+
+            # ✅ Handle MultiIndex columns for multiple tickers
+            if isinstance(raw_data.columns, pd.MultiIndex):
+                data = raw_data['Adj Close']
+            else:
+                data = raw_data[['Adj Close']]
+
             data = data.dropna()
 
-            # Daily returns
+            # ✅ Calculate daily returns
             daily_returns = data.pct_change().dropna()
             cov_matrix = daily_returns.cov()
             mean_returns = daily_returns.mean()
 
-            # Backtest portfolio cumulative returns
+            # ✅ Backtest portfolio cumulative returns
             portfolio_daily = (daily_returns * weights).sum(axis=1)
             cum_returns = (1 + portfolio_daily).cumprod()
 
@@ -396,7 +403,7 @@ if submitted:
             benchmark_daily = (daily_returns * equal_weights).sum(axis=1)
             benchmark_cum = (1 + benchmark_daily).cumprod()
 
-            # Plot backtest
+            # 📊 Plot historical backtest
             st.subheader("📊 Historical Portfolio Backtest")
             fig1, ax1 = plt.subplots(figsize=(8, 5))
             ax1.plot(cum_returns.index, cum_returns, label="Your Portfolio", linewidth=2)
@@ -406,7 +413,7 @@ if submitted:
             ax1.legend()
             st.pyplot(fig1)
 
-            # Monte Carlo Simulation
+            # 🎲 Monte Carlo Simulation
             num_simulations = 5000
             sim_results = []
 
@@ -418,7 +425,7 @@ if submitted:
 
             sim_df = pd.DataFrame(sim_results, columns=['Return', 'Volatility'])
 
-            # Risk metrics
+            # 📌 Risk metrics
             exp_return = np.mean(sim_df['Return']) * 252
             exp_vol = np.mean(sim_df['Volatility']) * np.sqrt(252)
             sharpe = exp_return / exp_vol if exp_vol != 0 else 0
@@ -428,7 +435,7 @@ if submitted:
             st.metric("Expected Annual Volatility", f"{exp_vol:.2%}")
             st.metric("Sharpe Ratio", f"{sharpe:.2f}")
 
-            # Monte Carlo plot
+            # 📈 Monte Carlo plot
             st.subheader("📈 Monte Carlo Risk Simulation")
             fig2, ax2 = plt.subplots(figsize=(8, 5))
             ax2.scatter(sim_df['Volatility'], sim_df['Return'], alpha=0.3, s=10)
@@ -440,6 +447,7 @@ if submitted:
             st.markdown("""
             **Features:**  
             - Backtests your chosen portfolio historically against an equal-weight benchmark.  
+            - Handles multiple tickers with correct data extraction.  
             - Runs Monte Carlo simulation to estimate future risk/return distribution.  
             - Provides Expected Return, Volatility, and Sharpe Ratio.  
             """)
