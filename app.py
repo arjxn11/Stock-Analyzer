@@ -354,18 +354,22 @@ if st.button("📢 Analyze Reddit Sentiment"):
         st.warning("Enter a stock ticker to analyze Reddit sentiment.")
 
 # ======================
-# 📈 Portfolio Risk Simulation + Backtest
+# 📈 Portfolio Risk Simulation + Backtest (with form)
 # ======================
-if st.button("💼 Portfolio Risk Simulation"):
+with st.form("portfolio_form"):
     st.subheader("Portfolio Monte Carlo Simulation + Backtest")
 
     tickers_input = st.text_input("Enter tickers separated by commas (e.g. AAPL, MSFT, NVDA):").upper().strip()
+    weights_input = st.text_input("Enter weights (comma-separated, must sum to 1):", "0.5,0.5")
+
+    submitted = st.form_submit_button("💼 Run Portfolio Simulation")
+
+if submitted:
     tickers = [t.strip() for t in tickers_input.split(",") if t.strip()]
 
     if len(tickers) < 2:
         st.warning("Enter at least two tickers for a portfolio.")
     else:
-        weights_input = st.text_input("Enter weights (comma-separated, must sum to 1):", "0.5,0.5")
         try:
             weights = [float(w.strip()) for w in weights_input.split(",")]
         except:
@@ -434,7 +438,7 @@ if st.button("💼 Portfolio Risk Simulation"):
             st.pyplot(fig2)
 
             st.markdown("""
-            **Features added:**  
+            **Features:**  
             - Backtests your chosen portfolio historically against an equal-weight benchmark.  
             - Runs Monte Carlo simulation to estimate future risk/return distribution.  
             - Provides Expected Return, Volatility, and Sharpe Ratio.  
