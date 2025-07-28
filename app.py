@@ -355,38 +355,18 @@ if st.button("📢 Analyze Reddit Sentiment"):
 
 
 # ======================
-# 📈 Portfolio Risk Simulation + Backtest + Time-based MC
+# 📈 Portfolio Risk Simulation + Backtest (Daily Interval + Debug)
 # ======================
 with st.form("portfolio_form"):
     st.subheader("Portfolio Monte Carlo Simulation + Backtest")
 
-    tickers_input = st.text_input(
-        "Enter tickers separated by commas (e.g. AAPL, MSFT, NVDA):"
-    ).upper().strip()
-
-    weights_input = st.text_input(
-        "Enter weights (comma-separated, must sum to 1):", "0.5,0.5"
-    )
-
-    forecast_option = st.selectbox(
-        "Select forecast horizon:",
-        ["7d", "1 month", "3 months", "6 months", "1 year"],
-        index=4
-    )
+    tickers_input = st.text_input("Enter tickers separated by commas (e.g. AAPL, MSFT, NVDA):").upper().strip()
+    weights_input = st.text_input("Enter weights (comma-separated, must sum to 1):", "0.5,0.5")
 
     submitted = st.form_submit_button("💼 Run Portfolio Simulation")
 
 if submitted:
     tickers = [t.strip() for t in tickers_input.split(",") if t.strip()]
-
-    horizon_map = {
-        "7d": 7,
-        "1 month": 21,
-        "3 months": 63,
-        "6 months": 126,
-        "1 year": 252
-    }
-    time_horizon = horizon_map[forecast_option]
 
     if len(tickers) < 2:
         st.warning("Enter at least two tickers for a portfolio.")
@@ -400,35 +380,82 @@ if submitted:
         if len(weights) != len(tickers) or not np.isclose(sum(weights), 1):
             st.error("❌ Number of weights must match tickers and sum to 1.")
         else:
-            # ✅ Download historical daily data
+            # ✅ Download historical daily data for reliability
             raw_data = yf.download(tickers, start=st_dt, end=en_dt, interval='1d')
 
+            # ✅ Debug preview
+            st.write("📄 Raw Data Preview:", raw_data.head())
+
             if raw_data.empty:
-                st.error("❌ No data downloaded. Check tickers and date range.")
+                st.error("❌ No data downloaded. Check tickers, date range, or market holidays.")
             else:
-                # ✅ Handle Adj Close / Close
+                # ✅ Handle single & multi-ticker + missing Adj Close
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     cols = raw_data.columns.get_level_values(0).unique()
-                    data = raw_data['Adj Close'] if 'Adj Close' in cols else raw_data['Close']
+                    if 'Adj Close' in cols:
+                        data = raw_data['Adj Close']
+                    else:
+                        data = raw_data['Close']
                 else:
-                    data = raw_data[['Adj Close']] if 'Adj Close' in raw_data.columns else raw_data[['Close']]
+                    if 'Adj Close' in raw_data.columns:
+                        data = raw_data[['Adj Close']]
+                    else:
+                        data = raw_data[['Close']]
 
                 data = data.dropna()
 
                 if data.empty:
-                    st.error("❌ Data contains only NaNs. Try a different date range or tickers.")
+                    st.error("❌ Data contains only NaNs after filtering. Try a different date range or tickers.")
                 else:
                     # ✅ Daily returns
                     daily_returns = data.pct_change().dropna()
+                    cov_matrix = daily_returns.cov()
+                    mean_returns = daily_returns.mean()
+
+                    # ✅ Backtest portfolio cumulative returns
                     portfolio_daily = (daily_returns * weights).sum(axis=1)
-
-                    # ✅ Backtest cumulative returns
                     cum_returns = (1 + portfolio_daily).cumprod()
-                    st.subheader("📊 Historical Portfolio Backtest")
-                    st.line_chart(cum_returns)
 
-                    # 🎲 Time-based Monte Carlo Simulation with mean + confidence band
+                    equal_weights = [1/len(tickers)] * len(tickers)
+                    benchmark_daily = (daily_returns * equal_weights).sum(axis=1)
+                    benchmark_cum = (1 + benchmark_daily).cumprod()
+
+                    # 📊 Plot historical backtest
+                    st.subheader("📊 Historical Portfolio Backtest")
+                    fig1, ax1 = plt.subplots(figsize=(8, 5))
+                    ax1.plot(cum_returns.index, cum_returns, label="Your Portfolio", linewidth=2)
+                    ax1.plot(benchmark_cum.index, benchmark_cum, label="Equal Weight Benchmark", linestyle="--")
+                    ax1.set_xlabel("Date")
+                    ax1.set_ylabel("Cumulative Return")
+                    ax1.legend()
+                    st.pyplot(fig1)
+
+                    # 🎲 Monte Carlo Simulation
+                    num_simulations = 5000
+                    sim_results = []
+
+                    for _ in range(num_simulations):
+                        sim_returns = np.random.normal(mean_returns, daily_returns.std())
+                        portfolio_return = np.sum(sim_returns * weights)
+                        portfolio_vol = np.sqrt(np.dot(weights, np.dot(cov_matrix, weights)))
+                        sim_results.append([portfolio_return, portfolio_vol])
+
+                    sim_df = pd.DataFrame(sim_results, columns=['Return', 'Volatility'])
+
+                    # 📌 Risk metrics
+                    exp_return = np.mean(sim_df['Return']) * 252
+                    exp_vol = np.mean(sim_df['Volatility']) * np.sqrt(252)
+                    sharpe = exp_return / exp_vol if exp_vol != 0 else 0
+
+                    st.subheader("📌 Risk Metrics")
+                    st.metric("Expected Annual Return", f"{exp_return:.2%}")
+                    st.metric("Expected Annual Volatility", f"{exp_vol:.2%}")
+                    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+
+                    # 📈 Monte Carlo plot
+                    # 🎲 Time-based Monte Carlo Simulation with Mean + Shaded Area
                     st.subheader(f"📈 {forecast_option} Monte Carlo Simulation")
+
                     num_simulations = 500
                     last_value = cum_returns.iloc[-1]
                     sim_paths = np.zeros((time_horizon, num_simulations))
@@ -448,7 +475,7 @@ if submitted:
                     p5 = np.percentile(sim_paths, 5, axis=1)
                     p95 = np.percentile(sim_paths, 95, axis=1)
 
-                    # Plot average + shaded confidence interval
+                    # Plot average + confidence bounds
                     fig, ax = plt.subplots(figsize=(8, 5))
                     days = np.arange(1, time_horizon + 1)
                     ax.plot(days, mean_path, label='Average Forecast', color='blue', linewidth=2)
