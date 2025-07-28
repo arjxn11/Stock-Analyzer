@@ -311,12 +311,15 @@ if st.button("Stock Analysis"):
 
         Divergence doesn't guarantee a reversal but can serve as an early warning. Confirm with other indicators like MACD, moving averages, or volume.
         """)
-
+##################
 # Price Forecast
+##################
 if st.button("📊Price Forecast"):
     st.markdown("This Model is currently being constructed. We are working on getting this live and running for your use ASAP! Thank you for your patience!")
 
+#########################
 # Sentiment Analysis
+#########################
 
 if st.button("📢 Analyze Reddit Sentiment"):
     if tkr:
@@ -355,7 +358,7 @@ if st.button("📢 Analyze Reddit Sentiment"):
 
 
 # ======================
-# 📈 Portfolio Risk Simulation + Backtest (Daily Interval + Debug)
+# 📈 Portfolio Risk Simulation + Backtest + 30-Day Time-Based MC
 # ======================
 with st.form("portfolio_form"):
     st.subheader("Portfolio Monte Carlo Simulation + Backtest")
@@ -380,11 +383,8 @@ if submitted:
         if len(weights) != len(tickers) or not np.isclose(sum(weights), 1):
             st.error("❌ Number of weights must match tickers and sum to 1.")
         else:
-            # ✅ Download historical daily data for reliability
+            # ✅ Download historical daily data
             raw_data = yf.download(tickers, start=st_dt, end=en_dt, interval='1d')
-
-            # ✅ Debug preview
-            st.write("📄 Raw Data Preview:", raw_data.head())
 
             if raw_data.empty:
                 st.error("❌ No data downloaded. Check tickers, date range, or market holidays.")
@@ -392,15 +392,9 @@ if submitted:
                 # ✅ Handle single & multi-ticker + missing Adj Close
                 if isinstance(raw_data.columns, pd.MultiIndex):
                     cols = raw_data.columns.get_level_values(0).unique()
-                    if 'Adj Close' in cols:
-                        data = raw_data['Adj Close']
-                    else:
-                        data = raw_data['Close']
+                    data = raw_data['Adj Close'] if 'Adj Close' in cols else raw_data['Close']
                 else:
-                    if 'Adj Close' in raw_data.columns:
-                        data = raw_data[['Adj Close']]
-                    else:
-                        data = raw_data[['Close']]
+                    data = raw_data[['Adj Close']] if 'Adj Close' in raw_data.columns else raw_data[['Close']]
 
                 data = data.dropna()
 
@@ -420,7 +414,7 @@ if submitted:
                     benchmark_daily = (daily_returns * equal_weights).sum(axis=1)
                     benchmark_cum = (1 + benchmark_daily).cumprod()
 
-                    # 📊 Plot historical backtest
+                    # 📊 Backtest graph (UNCHANGED)
                     st.subheader("📊 Historical Portfolio Backtest")
                     fig1, ax1 = plt.subplots(figsize=(8, 5))
                     ax1.plot(cum_returns.index, cum_returns, label="Your Portfolio", linewidth=2)
@@ -430,33 +424,44 @@ if submitted:
                     ax1.legend()
                     st.pyplot(fig1)
 
-                    # 🎲 Monte Carlo Simulation
-                    num_simulations = 5000
-                    sim_results = []
+                    # 🎲 30-Day Monte Carlo Time-Based Simulation
+                    st.subheader("📈 30-Day Monte Carlo Forecast")
+                    forecast_days = 30
+                    num_simulations = 500
+                    last_value = cum_returns.iloc[-1]
+                    sim_paths = np.zeros((forecast_days, num_simulations))
 
-                    for _ in range(num_simulations):
-                        sim_returns = np.random.normal(mean_returns, daily_returns.std())
-                        portfolio_return = np.sum(sim_returns * weights)
-                        portfolio_vol = np.sqrt(np.dot(weights, np.dot(cov_matrix, weights)))
-                        sim_results.append([portfolio_return, portfolio_vol])
+                    daily_mean = portfolio_daily.mean()
+                    daily_vol = portfolio_daily.std()
 
-                    sim_df = pd.DataFrame(sim_results, columns=['Return', 'Volatility'])
+                    for sim in range(num_simulations):
+                        prices = [last_value]
+                        for t in range(1, forecast_days):
+                            rnd = np.random.normal(daily_mean, daily_vol)
+                            prices.append(prices[-1] * (1 + rnd))
+                        sim_paths[:, sim] = prices
 
-                    # 📌 Risk metrics
-                    exp_return = np.mean(sim_df['Return']) * 252
-                    exp_vol = np.mean(sim_df['Volatility']) * np.sqrt(252)
-                    sharpe = exp_return / exp_vol if exp_vol != 0 else 0
+                    # Calculate average & confidence interval
+                    mean_path = sim_paths.mean(axis=1)
+                    p5 = np.percentile(sim_paths, 5, axis=1)
+                    p95 = np.percentile(sim_paths, 95, axis=1)
 
-                    st.subheader("📌 Risk Metrics")
-                    st.metric("Expected Annual Return", f"{exp_return:.2%}")
-                    st.metric("Expected Annual Volatility", f"{exp_vol:.2%}")
-                    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                    # Combine historical + forecast
+                    forecast_dates = pd.date_range(cum_returns.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
 
-                    # 📈 Monte Carlo plot
-                    st.subheader("📈 Monte Carlo Risk Simulation")
-                    fig2, ax2 = plt.subplots(figsize=(8, 5))
-                    ax2.scatter(sim_df['Volatility'], sim_df['Return'], alpha=0.3, s=10)
-                    ax2.set_xlabel("Volatility")
-                    ax2.set_ylabel("Return")
-                    ax2.set_title("Monte Carlo Portfolio Risk Simulation")
+                    fig2, ax2 = plt.subplots(figsize=(10, 5))
+                    ax2.plot(cum_returns.index, cum_returns, color='blue', linewidth=2, label='Historical Portfolio')
+                    ax2.plot(forecast_dates, mean_path, color='orange', linewidth=2, label='Average Forecast')
+                    ax2.fill_between(forecast_dates, p5, p95, color='gray', alpha=0.3, label='90% Confidence Interval')
+
+                    ax2.set_title("Portfolio Value with 30-Day Monte Carlo Forecast")
+                    ax2.set_xlabel("Date")
+                    ax2.set_ylabel("Portfolio Value")
+                    ax2.legend()
                     st.pyplot(fig2)
+
+                    # 📌 Forecast summary metrics
+                    final_values = sim_paths[-1, :]
+                    st.metric("Expected Final Value", f"{final_values.mean():.2f}")
+                    st.metric("Best Case (95th %)", f"{np.percentile(final_values,95):.2f}")
+                    st.metric("Worst Case (5th %)", f"{np.percentile(final_values,5):.2f}")
