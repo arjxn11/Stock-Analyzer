@@ -453,42 +453,10 @@ if submitted:
                     st.metric("Sharpe Ratio", f"{sharpe:.2f}")
 
                     # 📈 Monte Carlo plot
-                    # 🎲 Time-based Monte Carlo Simulation with Mean + Shaded Area
-                    st.subheader(f"📈 {forecast_option} Monte Carlo Simulation")
-
-                    num_simulations = 500
-                    last_value = cum_returns.iloc[-1]
-                    sim_paths = np.zeros((time_horizon, num_simulations))
-
-                    daily_mean = portfolio_daily.mean()
-                    daily_vol = portfolio_daily.std()
-
-                    for sim in range(num_simulations):
-                        prices = [last_value]
-                        for t in range(1, time_horizon):
-                            rnd = np.random.normal(daily_mean, daily_vol)
-                            prices.append(prices[-1] * (1 + rnd))
-                        sim_paths[:, sim] = prices
-
-                    # Calculate statistics
-                    mean_path = sim_paths.mean(axis=1)
-                    p5 = np.percentile(sim_paths, 5, axis=1)
-                    p95 = np.percentile(sim_paths, 95, axis=1)
-
-                    # Plot average + confidence bounds
-                    fig, ax = plt.subplots(figsize=(8, 5))
-                    days = np.arange(1, time_horizon + 1)
-                    ax.plot(days, mean_path, label='Average Forecast', color='blue', linewidth=2)
-                    ax.fill_between(days, p5, p95, color='gray', alpha=0.3, label='90% Confidence Interval')
-
-                    ax.set_title(f"Monte Carlo Forecast – Next {forecast_option}")
-                    ax.set_xlabel("Day")
-                    ax.set_ylabel("Simulated Portfolio Value")
-                    ax.legend()
-                    st.pyplot(fig)
-
-                    # Summary metrics
-                    final_values = sim_paths[-1, :]
-                    st.metric("Expected Final Value", f"{final_values.mean():.2f}")
-                    st.metric("Best Case (95th %)", f"{np.percentile(final_values,95):.2f}")
-                    st.metric("Worst Case (5th %)", f"{np.percentile(final_values,5):.2f}")
+                    st.subheader("📈 Monte Carlo Risk Simulation")
+                    fig2, ax2 = plt.subplots(figsize=(8, 5))
+                    ax2.scatter(sim_df['Volatility'], sim_df['Return'], alpha=0.3, s=10)
+                    ax2.set_xlabel("Volatility")
+                    ax2.set_ylabel("Return")
+                    ax2.set_title("Monte Carlo Portfolio Risk Simulation")
+                    st.pyplot(fig2)
