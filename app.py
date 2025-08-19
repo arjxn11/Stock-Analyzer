@@ -30,7 +30,10 @@ int_time = st.selectbox(
     index=7  # Defaults to 1d
 )
 st.markdown("Note: Some tickers may not provide data for all intervals. Try 30m, 60m, 1d, 1w as a check in case you're unable to see data by-minute.")
-# Get data
+
+# ----------------------------
+# Data download helper
+# ----------------------------
 @st.cache_data
 def get_stock_data(ticker, start, end, interval):
     if ticker == "":
@@ -48,8 +51,9 @@ def get_stock_data(ticker, start, end, interval):
 
     return df
 
-
-# VWAP and TWAP calculations
+# ----------------------------
+# Technical indicators
+# ----------------------------
 def calculate_vwap(df):
     if 'Close' in df.columns and 'Volume' in df.columns:
         volume = df['Volume'].replace(0, np.nan)
@@ -76,11 +80,9 @@ def calculate_rsi(df, period=14):
     df['RSI'] = rsi
     return df
 
-
 def calculate_eps(tkr):
     ticker = yf.Ticker(tkr)
     info = ticker.info
-
     trailingeps = info.get("trailingEps", "N/A")
     forwardeps = info.get("forwardEps", "N/A")
     return trailingeps, forwardeps
@@ -88,9 +90,7 @@ def calculate_eps(tkr):
 def get_debt_equity(tkr: str):
     ticker = yf.Ticker(tkr)
     bs = ticker.balance_sheet
-
     try:
-        # Try all common equity field variations
         equity_fields = ["Total Stockholder Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"]
         debt_fields = ["Total Debt", "Long Term Debt"]
 
@@ -136,12 +136,12 @@ def plot_macd_dark(df):
     ax.set_facecolor('black')
 
     # Plot MACD and Signal Line
-    ax.plot(df_macd.index, df_macd['MACD'], label='MACD', color='blue', linewidth=1.5)
-    ax.plot(df_macd.index, df_macd['Signal_Line'], label='Signal Line', color='orange', linewidth=1.5)
+    ax.plot(df_macd.index, df_macd['MACD'], label='MACD', linewidth=1.5)
+    ax.plot(df_macd.index, df_macd['Signal_Line'], label='Signal Line', linewidth=1.5)
 
     # Green for positive hist, red for negative
     colors = ['green' if val >= 0 else 'red' for val in df_macd['MACD_Hist']]
-    ax.bar(df_macd.index, df_macd['MACD_Hist'], color=colors, alpha=0.7, label='MACD Histogram', width=1)
+    ax.bar(df_macd.index, df_macd['MACD_Hist'], alpha=0.7, label='MACD Histogram', width=1, color=colors)
 
     # Remove grid and style text
     ax.grid(False)
@@ -158,6 +158,9 @@ def plot_macd_dark(df):
 
     return fig
 
+# ----------------------------
+# FinBERT sentiment
+# ----------------------------
 @st.cache_resource
 def load_finbert():
     tokenizer = BertTokenizer.from_pretrained("ProsusAI/finbert")
@@ -165,11 +168,9 @@ def load_finbert():
     model.eval()
     return tokenizer, model
 
-
 @st.cache_data(show_spinner=False)
 def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
     tokenizer, model = load_finbert()
-
     reddit = praw.Reddit(
         client_id=st.secrets["REDDIT_CLIENT_ID"],
         client_secret=st.secrets["REDDIT_CLIENT_SECRET"],
@@ -190,13 +191,12 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
         if created_time < start_time:
             continue
 
-        # Tokenize and run through model
         inputs = tokenizer(post.title, return_tensors="pt", truncation=True, max_length=512)
         with torch.no_grad():
             logits = model(**inputs).logits
             probs = F.softmax(logits, dim=1).squeeze().tolist()
 
-        labels = model.config.id2label  # Maps [0, 1, 2] to ['positive', 'negative', 'neutral']
+        labels = model.config.id2label  # {0:'positive', 1:'negative', 2:'neutral'}
         sentiment_scores = {labels[i]: round(p, 4) for i, p in enumerate(probs)}
         top_label = max(sentiment_scores, key=sentiment_scores.get)
 
@@ -211,8 +211,9 @@ def analyze_reddit_sentiment(tkr, days_back=7, posts=50):
 
     return pd.DataFrame(rows)
 
-
-# Analysis
+# ----------------------------
+# Single-ticker analysis UI
+# ----------------------------
 if st.button("Stock Analysis"):
     df = get_stock_data(tkr, st_dt, en_dt, int_time)
 
@@ -234,49 +235,55 @@ if st.button("Stock Analysis"):
         st.subheader("Raw Extracted Data")
         st.dataframe(df)
 
-        # Adding VWAP and TWAP to the chart
+        # Indicators
         df = calculate_vwap(df)
         df = calculate_twap(df)
-        df= calculate_rsi(df)
-        df= calculate_macd(df)
+        df = calculate_rsi(df)
+        df = calculate_macd(df)
 
-        #EPS and P/E Ratio
-        trailingeps, forwardeps=calculate_eps(tkr)
+        # EPS and P/E Ratio
+        trailingeps, forwardeps = calculate_eps(tkr)
         st.subheader("EPS and P/E ratio")
         st.write(f'**Trailing EPS:** {trailingeps}')
         st.write(f'**Forward EPS:** {forwardeps}')
 
-        if trailingeps != "N/A" and isinstance(trailingeps, (float, int)) and trailingeps!=0:
-            current_price=df['Close'].iloc[-1]
-            pe_ratio=current_price/trailingeps
+        if trailingeps != "N/A" and isinstance(trailingeps, (float, int)) and trailingeps != 0:
+            current_price = df['Close'].iloc[-1]
+            pe_ratio = current_price / trailingeps
             st.write(f'**Current Price:** {current_price:.2f}')
             st.write(f'**Trailing P/E Ratio:** {pe_ratio:.2f}')
         else:
             st.warning("P/E Data unavailable")
 
-        st.markdown("If P/E ratio is high, typically over 25, that means investors expect significant growth from the company and the investors are willing to pay more for each dollar of earnings, expecting company profits to rise in the future. \n Tech companies like Amazon and NVIDIA have high P/E ratios because of their rapid growth potential. \n A low P/E ratio, typically 15 or lower, could mean that the stock is undervalued, indicating an opportunity to open a position with that stock (or that it isn't expected grow much)")
+        st.markdown(
+            "If P/E ratio is high, typically over 25, that means investors expect significant growth from the company. "
+            "Tech companies like Amazon and NVIDIA often have high P/E ratios due to rapid growth expectations. "
+            "A low P/E ratio, typically 15 or lower, could suggest undervaluation (or lower growth expectations)."
+        )
+
         # Preview
         st.subheader("📈 VWAP & TWAP")
         st.dataframe(df[['Date', 'Close', 'Volume', 'VWAP', 'TWAP']])
 
         # Debt-To-Equity Ratio 
-        equity, debt= get_debt_equity(tkr)
+        equity, debt = get_debt_equity(tkr)
         st.subheader("Debt to Equity Ratio")
         if equity:
-            d_e=debt/equity if equity else None
+            d_e = debt / equity if equity else None
             st.write(f'**Equity:** {equity:,.0f}')
             st.write(f'**Debt:** {debt:,.0f}')
             st.write(f'**Debt-to-Equity:** {d_e:.2f}')
         else:
             st.warning("Debt/Equity data not available for this ticker.")
         
-        st.markdown("A high D/E ratio indicates that a company is more reliant on debt to finance its operations, which indicates higher financial risk. \n A lower ratio indicates a company relies more on equity financing, suggesting lower financial risk and more stability. ")
-
-
+        st.markdown(
+            "A high D/E ratio indicates heavier reliance on debt (higher financial risk). "
+            "A lower ratio suggests more equity financing (often more stability)."
+        )
 
         # Plot line chart
         plot_cols = ["Close", "VWAP", "TWAP", "EMA_200"]
-        macd_cols= ["MACD", "Signal_Line", "MACD_Hist"]
+        macd_cols = ["MACD", "Signal_Line", "MACD_Hist"]
 
         if df[plot_cols].notna().any().all():
             st.subheader("📉 Price, RSI & MACD Overview")
@@ -284,35 +291,30 @@ if st.button("Stock Analysis"):
             st.line_chart(df.set_index('Date')["RSI"])
 
             st.markdown("""
-            - **VWAP < TWAP**: Indicates that more volume was traded at lower prices.  
-            VWAP is often used by institutions to evaluate trading efficiency, while TWAP is used in execution algorithms to slice orders evenly over time.
-                        
-            - The 200 day EMA is used together with the MACD indicator to identify good opportunities to open long or short positions on a stock
-
-            - **RSI (Relative Strength Index)**:  
-            RSI is a momentum oscillator ranging from 0 to 100. Values **above 70** indicate *overbought* conditions (possible pullback), while **below 30** suggests *oversold* (potential rebound).  
-            RSI is most effective in sideways markets and calculated over a 14-period window.  
-            **Divergence** between RSI and price trends often signals potential **reversals**.""")
+            - **VWAP < TWAP**: More volume traded at lower prices.  
+            - **EMA 200 + MACD**: Use together to spot trend entries/exits.  
+            - **RSI**: >70 overbought (risk of pullback), <30 oversold (potential rebound). Divergences can flag reversals.
+            """)
         else:
             st.warning("⚠️ One of Close/VWAP/TWAP/RSI/MACD/Signal_Line contains only NaNs — cannot plot.")
+
         if df[macd_cols].notna().any().all():
             st.subheader("📉 MACD & Signal Line")
             st.pyplot(plot_macd_dark(df))
         else:
             st.warning("⚠️ One or more of MACD components contain only NaNs — cannot plot.")
-        st.markdown("MACD measures short vs long EMA difference. When MACD crosses **above** the Signal Line, it may signal **bullish momentum**. A **downward crossover** may suggest bearish sentiment.")
-        # Explaination
+
+        st.markdown("MACD: when MACD crosses **above** Signal, potential **bullish** momentum; **below** suggests bearish momentum.")
+
         st.markdown("""
         ### 🔁 Trend Reversals and RSI Divergence
-        A **reversal** refers to a change in the direction of a price trend—either from an uptrend to a downtrend or vice versa.  
-        When RSI diverges from price action, it can signal weakening momentum:
-        - **Bearish divergence**: Price makes new highs but RSI makes lower highs → Potential downtrend reversal.
-        - **Bullish divergence**: Price makes new lows but RSI makes higher lows → Potential uptrend reversal.
-
-        Divergence doesn't guarantee a reversal but can serve as an early warning. Confirm with other indicators like MACD, moving averages, or volume.
+        - **Bearish divergence**: Price makes higher highs, RSI makes lower highs.  
+        - **Bullish divergence**: Price makes lower lows, RSI makes higher lows.  
+        Use with MACD/MA/volume for confirmation.
         """)
+
 ##################
-# Price Forecast
+# Price Forecast placeholder (single-ticker)
 ##################
 if st.button("📊Price Forecast"):
     st.markdown("This Model is currently being constructed. We are working on getting this live and running for your use ASAP! Thank you for your patience!")
@@ -320,11 +322,9 @@ if st.button("📊Price Forecast"):
 #########################
 # Sentiment Analysis
 #########################
-
 if st.button("📢 Analyze Reddit Sentiment"):
     if tkr:
         sentiment_df = analyze_reddit_sentiment(tkr)
-
         if not sentiment_df.empty:
             sentiment_counts = sentiment_df['Label'].value_counts()
             avg_positive = sentiment_df['Positive'].mean()
@@ -335,11 +335,10 @@ if st.button("📢 Analyze Reddit Sentiment"):
             st.metric(label="Avg Positive Score", value=f"{avg_positive:.3f}")
             st.metric(label="Avg Negative Score", value=f"{avg_negative:.3f}")
             st.metric(label="Avg Neutral Score", value=f"{avg_neutral:.3f}")
-            st.markdown("**Note:** Avg Positive Score=0.15 means that the model sees a low chance of positive sentiment in posts.")
+            st.markdown("**Note:** Avg Positive Score=0.15 means the model sees a low probability of positive sentiment in posts.")
 
             st.write(sentiment_counts.rename("Count").to_frame())
 
-            # Show sorted sentiment scores
             st.dataframe(
                 sentiment_df.sort_values("Positive", ascending=False)[
                     ["Date", "Text", "Label", "Positive", "Negative", "Neutral"]
@@ -347,15 +346,14 @@ if st.button("📢 Analyze Reddit Sentiment"):
             )
 
             st.markdown("""
-            - **Label**: Most confident sentiment classification (based on highest probability)
-            - **Positive/Negative/Neutral**: Full probability scores for each sentiment class
-            - You can sort the table by `Positive` or `Negative` to surface the strongest signals
+            - **Label**: Most confident class (highest probability)
+            - **Positive/Negative/Neutral**: Class probabilities
+            - Sort by `Positive`/`Negative` to surface strongest signals
             """)
         else:
             st.warning("No recent Reddit posts found related to this ticker.")
     else:
         st.warning("Enter a stock ticker to analyze Reddit sentiment.")
-
 
 # ======================
 # 📈 Portfolio Backtest + GBM (Black–Scholes) Forecast
@@ -416,7 +414,6 @@ if submitted:
 
                     # Align weights to the available columns order
                     if len(available) != len(weights):
-                        # Rebuild weights mapping by original order
                         w_map = dict(zip(tickers, weights))
                         weights = [w_map[t] for t in available]
                         if not np.isclose(sum(weights), 1):
