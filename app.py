@@ -496,20 +496,25 @@ if submitted:
                     # Stitch normalized history (end = 1.0) with forecast
                     hist_index = cum_returns.index
                     hist_rel = (cum_returns / cum_returns.iloc[-1]).values
+
+                    # Forecast dates: forecast_days business days AFTER last history date
                     forecast_dates = pd.bdate_range(hist_index[-1] + pd.Timedelta(days=1), periods=forecast_days)
+
+                    # Build an x-axis that matches the forecast arrays: include stitch point + forecast days
+                    x_fc = pd.Index([hist_index[-1]]).append(forecast_dates)  # length == forecast_days + 1
 
                     fig2, ax2 = plt.subplots(figsize=(10, 5))
                     ax2.plot(hist_index, hist_rel, linewidth=2, label="Historical Portfolio (normalized)")
-                    ax2.plot(forecast_dates.insert(0, hist_index[-1]), np.insert(mean_path, 0, 1.0),
-                             linewidth=2, label="Average GBM Forecast")
-                    ax2.fill_between(forecast_dates.insert(0, hist_index[-1]),
-                                     np.insert(p5, 0, 1.0),
-                                     np.insert(p95, 0, 1.0),
-                                     alpha=0.3, label="90% Confidence Interval")
+
+                    # mean_path, p5, p95 already have length forecast_days + 1 (t=0..forecast_days)
+                    ax2.plot(x_fc, mean_path, linewidth=2, label="Average GBM Forecast")
+                    ax2.fill_between(x_fc, p5, p95, alpha=0.3, label="90% Confidence Interval")
+
                     ax2.set_title("Portfolio Value (GBM/Black–Scholes) — Correlated Monte Carlo")
                     ax2.set_xlabel("Date"); ax2.set_ylabel("Relative Value (end of history = 1.0)")
                     ax2.legend()
                     st.pyplot(fig2)
+
 
                     final_vals = port_paths[-1, :]
                     st.metric("Expected Final (rel.)", f"{final_vals.mean():.3f}")
