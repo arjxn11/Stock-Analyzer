@@ -358,13 +358,20 @@ if st.button("📢 Analyze Reddit Sentiment"):
 
 
 # ======================
-# 📈 Portfolio Risk Simulation + Backtest + 30-Day Time-Based MC
+# 📈 Portfolio Backtest + GBM (Black–Scholes) Forecast
 # ======================
 with st.form("portfolio_form"):
-    st.subheader("Portfolio Monte Carlo Simulation + Backtest")
+    st.subheader("Portfolio Monte Carlo Simulation + Backtest (GBM/Black–Scholes)")
 
     tickers_input = st.text_input("Enter tickers separated by commas (e.g. AAPL, MSFT, NVDA):").upper().strip()
     weights_input = st.text_input("Enter weights (comma-separated, must sum to 1):", "0.5,0.5")
+
+    # GBM controls
+    forecast_days   = st.number_input("Forecast horizon (trading days)", min_value=5, max_value=252, value=30, step=5)
+    num_simulations = st.number_input("Number of simulations", min_value=100, max_value=5000, value=1000, step=100)
+    drift_mode      = st.radio("Drift mode", ["Historical (real-world)", "Risk-neutral"], index=0, horizontal=True)
+    risk_free_pct   = st.number_input("Risk-free rate (annual, %)", min_value=-5.0, max_value=15.0, value=4.0, step=0.25)
+    use_correlation = st.checkbox("Use correlated shocks (Cholesky)", value=True)
 
     submitted = st.form_submit_button("💼 Run Portfolio Simulation")
 
@@ -374,94 +381,140 @@ if submitted:
     if len(tickers) < 2:
         st.warning("Enter at least two tickers for a portfolio.")
     else:
+        # Parse weights
         try:
             weights = [float(w.strip()) for w in weights_input.split(",")]
-        except:
+        except Exception:
             st.error("❌ Invalid weights format.")
             weights = []
 
         if len(weights) != len(tickers) or not np.isclose(sum(weights), 1):
             st.error("❌ Number of weights must match tickers and sum to 1.")
         else:
-            # ✅ Download historical daily data
-            raw_data = yf.download(tickers, start=st_dt, end=en_dt, interval='1d')
-
+            # ---------- Download daily data ----------
+            raw_data = yf.download(tickers, start=st_dt, end=en_dt, interval='1d', progress=False)
             if raw_data.empty:
                 st.error("❌ No data downloaded. Check tickers, date range, or market holidays.")
             else:
-                # ✅ Handle single & multi-ticker + missing Adj Close
+                # Select price columns (preserve user order of tickers!)
                 if isinstance(raw_data.columns, pd.MultiIndex):
-                    cols = raw_data.columns.get_level_values(0).unique()
-                    data = raw_data['Adj Close'] if 'Adj Close' in cols else raw_data['Close']
+                    cols_top = raw_data.columns.get_level_values(0).unique()
+                    price_block = 'Adj Close' if 'Adj Close' in cols_top else 'Close'
+                    data = raw_data[price_block].copy()
                 else:
                     data = raw_data[['Adj Close']] if 'Adj Close' in raw_data.columns else raw_data[['Close']]
 
-                data = data.dropna()
-
-                if data.empty:
-                    st.error("❌ Data contains only NaNs after filtering. Try a different date range or tickers.")
+                # Keep only requested tickers, in the same order as user input
+                available = [t for t in tickers if t in data.columns]
+                missing = [t for t in tickers if t not in data.columns]
+                if missing:
+                    st.warning(f"Missing tickers (no price data): {', '.join(missing)}")
+                if len(available) < 2:
+                    st.error("Not enough valid tickers to form a portfolio.")
                 else:
-                    # ✅ Daily returns
-                    daily_returns = data.pct_change().dropna()
-                    cov_matrix = daily_returns.cov()
-                    mean_returns = daily_returns.mean()
+                    data = data[available].dropna()
 
-                    # ✅ Backtest portfolio cumulative returns
-                    portfolio_daily = (daily_returns * weights).sum(axis=1)
+                    # Align weights to the available columns order
+                    if len(available) != len(weights):
+                        # Rebuild weights mapping by original order
+                        w_map = dict(zip(tickers, weights))
+                        weights = [w_map[t] for t in available]
+                        if not np.isclose(sum(weights), 1):
+                            st.error("After dropping missing tickers, weights no longer sum to 1. Please re-enter weights.")
+                            st.stop()
+
+                    # ---------- Backtest ----------
+                    daily_returns = data.pct_change().dropna()
+                    if daily_returns.empty:
+                        st.error("❌ No returns after cleaning. Try a wider date range.")
+                        st.stop()
+
+                    weights_arr = np.array(weights)
+                    portfolio_daily = (daily_returns * weights_arr).sum(axis=1)
                     cum_returns = (1 + portfolio_daily).cumprod()
 
-                    equal_weights = [1/len(tickers)] * len(tickers)
-                    benchmark_daily = (daily_returns * equal_weights).sum(axis=1)
+                    # Equal-weight benchmark
+                    eq_w = np.array([1/len(available)] * len(available))
+                    benchmark_daily = (daily_returns * eq_w).sum(axis=1)
                     benchmark_cum = (1 + benchmark_daily).cumprod()
 
-                    # 📊 Backtest graph (UNCHANGED)
                     st.subheader("📊 Historical Portfolio Backtest")
                     fig1, ax1 = plt.subplots(figsize=(8, 5))
                     ax1.plot(cum_returns.index, cum_returns, label="Your Portfolio", linewidth=2)
                     ax1.plot(benchmark_cum.index, benchmark_cum, label="Equal Weight Benchmark", linestyle="--")
-                    ax1.set_xlabel("Date")
-                    ax1.set_ylabel("Cumulative Return")
+                    ax1.set_xlabel("Date"); ax1.set_ylabel("Cumulative Return")
                     ax1.legend()
                     st.pyplot(fig1)
 
-                    # 🎲 30-Day Monte Carlo Time-Based Simulation
-                    st.subheader("📈 30-Day Monte Carlo Forecast")
-                    forecast_days = 30
-                    num_simulations = 500
-                    last_value = cum_returns.iloc[-1]
-                    sim_paths = np.zeros((forecast_days, num_simulations))
+                    # ---------- GBM / Black–Scholes MC ----------
+                    trading_days = 252
+                    dt = 1.0 / trading_days
+                    r = risk_free_pct / 100.0
 
-                    daily_mean = portfolio_daily.mean()
-                    daily_vol = portfolio_daily.std()
+                    price_df = data.copy().dropna()
+                    log_ret = np.log(price_df / price_df.shift(1)).dropna()
 
-                    for sim in range(num_simulations):
-                        prices = [last_value]
-                        for t in range(1, forecast_days):
-                            rnd = np.random.normal(daily_mean, daily_vol)
-                            prices.append(prices[-1] * (1 + rnd))
-                        sim_paths[:, sim] = prices
+                    mu_ann    = log_ret.mean() * trading_days                 # vector
+                    Sigma_ann = log_ret.cov() * trading_days                 # covariance (annual)
+                    sigma_ann = np.sqrt(np.diag(Sigma_ann))                  # vols
 
-                    # Calculate average & confidence interval
-                    mean_path = sim_paths.mean(axis=1)
-                    p5 = np.percentile(sim_paths, 5, axis=1)
-                    p95 = np.percentile(sim_paths, 95, axis=1)
+                    mu_vec = pd.Series(r, index=mu_ann.index) if drift_mode == "Risk-neutral" else mu_ann
 
-                    # Combine historical + forecast
-                    forecast_dates = pd.date_range(cum_returns.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
+                    S0 = price_df.iloc[-1].values
+                    assets = list(price_df.columns)
+                    n_assets = len(assets)
+
+                    # Cholesky (with tiny jitter)
+                    if use_correlation:
+                        eps = 1e-10
+                        try:
+                            L = np.linalg.cholesky(Sigma_ann + eps * np.eye(n_assets))
+                        except np.linalg.LinAlgError:
+                            st.warning("Covariance not positive-definite; falling back to independent shocks.")
+                            use_correlation = False
+
+                    num_simulations = int(num_simulations)
+                    sim_prices = np.zeros((forecast_days + 1, num_simulations, n_assets), dtype=float)
+                    sim_prices[0, :, :] = S0
+
+                    drift_term = (mu_vec.values - 0.5 * sigma_ann**2) * dt
+                    Z = np.random.normal(size=(forecast_days, num_simulations, n_assets))
+
+                    for t in range(1, forecast_days + 1):
+                        if use_correlation:
+                            shocks = (Z[t-1] @ L.T) * np.sqrt(dt)  # correlated annual → scale by sqrt(dt)
+                        else:
+                            shocks = Z[t-1] * (sigma_ann * np.sqrt(dt))
+                        incr = drift_term + shocks
+                        sim_prices[t] = sim_prices[t-1] * np.exp(incr)
+
+                    # Portfolio paths (relative to S0)
+                    rel_prices = sim_prices / S0
+                    port_paths = np.tensordot(rel_prices, weights_arr, axes=([2], [0]))  # (time, sims)
+
+                    mean_path = port_paths.mean(axis=1)
+                    p5  = np.percentile(port_paths, 5, axis=1)
+                    p95 = np.percentile(port_paths, 95, axis=1)
+
+                    # Stitch normalized history (end = 1.0) with forecast
+                    hist_index = cum_returns.index
+                    hist_rel = (cum_returns / cum_returns.iloc[-1]).values
+                    forecast_dates = pd.bdate_range(hist_index[-1] + pd.Timedelta(days=1), periods=forecast_days)
 
                     fig2, ax2 = plt.subplots(figsize=(10, 5))
-                    ax2.plot(cum_returns.index, cum_returns, color='blue', linewidth=2, label='Historical Portfolio')
-                    ax2.plot(forecast_dates, mean_path, color='orange', linewidth=2, label='Average Forecast')
-                    ax2.fill_between(forecast_dates, p5, p95, color='gray', alpha=0.3, label='90% Confidence Interval')
-
-                    ax2.set_title("Portfolio Value with 30-Day Monte Carlo Forecast")
-                    ax2.set_xlabel("Date")
-                    ax2.set_ylabel("Portfolio Value")
+                    ax2.plot(hist_index, hist_rel, linewidth=2, label="Historical Portfolio (normalized)")
+                    ax2.plot(forecast_dates.insert(0, hist_index[-1]), np.insert(mean_path, 0, 1.0),
+                             linewidth=2, label="Average GBM Forecast")
+                    ax2.fill_between(forecast_dates.insert(0, hist_index[-1]),
+                                     np.insert(p5, 0, 1.0),
+                                     np.insert(p95, 0, 1.0),
+                                     alpha=0.3, label="90% Confidence Interval")
+                    ax2.set_title("Portfolio Value (GBM/Black–Scholes) — Correlated Monte Carlo")
+                    ax2.set_xlabel("Date"); ax2.set_ylabel("Relative Value (end of history = 1.0)")
                     ax2.legend()
                     st.pyplot(fig2)
 
-                    # 📌 Forecast summary metrics
-                    final_values = sim_paths[-1, :]
-                    st.metric("Expected Final Value", f"{final_values.mean():.2f}")
-                    st.metric("Best Case (95th %)", f"{np.percentile(final_values,95):.2f}")
-                    st.metric("Worst Case (5th %)", f"{np.percentile(final_values,5):.2f}")
+                    final_vals = port_paths[-1, :]
+                    st.metric("Expected Final (rel.)", f"{final_vals.mean():.3f}")
+                    st.metric("Best Case (95th %, rel.)", f"{np.percentile(final_vals,95):.3f}")
+                    st.metric("Worst Case (5th %, rel.)", f"{np.percentile(final_vals,5):.3f}")
