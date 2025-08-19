@@ -520,3 +520,6 @@ if submitted:
                     st.metric("Expected Final (rel.)", f"{final_vals.mean():.3f}")
                     st.metric("Best Case (95th %, rel.)", f"{np.percentile(final_vals,95):.3f}")
                     st.metric("Worst Case (5th %, rel.)", f"{np.percentile(final_vals,5):.3f}")
+                    st.metric("On average", f"{np.mean(final_vals):.3f}")
+                    st.metric("Median outcome", f"{np.median(final_vals):.3f}")
+
